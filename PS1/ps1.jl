@@ -1,4 +1,4 @@
-using Random, Statistics, Parameters, StatsBase, Distributions, Optim, ForwardDiff, NLopt
+using Random, Statistics, Parameters, StatsBase, Distributions, Optim, ForwardDiff
 ## generate data
 """
 M = 250 : markets
@@ -22,15 +22,14 @@ param = parameters()
 μ = 2.0
 σ = 1.0
 
-rng = MersenneTwister(1234)
+# Generate observable market variable X ~ N(3,1) : 250 X 1 vector and fix it
 
-# Generate observable market variable X ~ N(3,1) : 250 X 1 vector
+X = rand(Normal(3,1), param.M)
 
-X = rand(rng,Normal(3,1), param.M)
-
-# draw the numbers of potential entrants in each market
+# draw the numbers of potential entrants in each market then fix it
 F = [2,3,4]
-entrant = sample(rng ,F, param.M; replace = true, ordered = false)
+entrant = sample(MersenneTwister(342) ,F, param.M; replace = true, ordered = false)
+
 """
 First stage
 
@@ -54,27 +53,23 @@ Firms maximize their expost profit
 
 # firm's observable characteristics Z ~ N(0,1) in each market : entrant_number X 1
 tru_param = [μ,σ,δ]
-
-
-seed = MersenneTwister(1234)
-
-function eq_firm(tru_param::AbstractVector, param, entrant::AbstractVector, rng)
+function eq_firm(tru_param::AbstractVector, param, entrant::AbstractVector)
     # unobservable part of firm generating
     u_firm_new = Vector{Float64}[]
     for i in eachindex(entrant)
-        u_firm = rand(rng,Normal(tru_param[1], tru_param[2]), entrant[i])
+        u_firm = rand(MersenneTwister(1234),Normal(tru_param[1], tru_param[2]), entrant[i])
         u_firm_new = push!(u_firm_new, u_firm)
     end
     # observable part firm generating
     z_firm_new = Vector{Float64}[]
     for i in eachindex(entrant)
-        z_firm = rand(rng, Normal(0,1), entrant[i])
+        z_firm = rand(Normal(0,1), entrant[i])
         z_firm_new = push!(z_firm_new, z_firm)
     end
     ## equilbrium firm entry : Most profitably firms enter firm
     #Profit : Π = X*β - (Z * α + u_firm)   
     n = zeros(eltype(Int64),length(entrant))
-    Π = copy(u_firm_new)
+    Π = similar(u_firm_new)
     for i in eachindex(entrant)
         Π[i] = X[i] * param.β .- z_firm_new[i] * param.α - u_firm_new[i]
         sort!(Π[i], rev= true)
@@ -86,16 +81,17 @@ function eq_firm(tru_param::AbstractVector, param, entrant::AbstractVector, rng)
             end
         end
     end
-    return n, z_firm_new  #250 X 1 vector
+    return n, z_firm_new  #250 X 1 vector, firm specific cost
 end
 
 
-equil_firm, Z = eq_firm(tru_param, param, entrant, seed)
+entered_firm, Z = eq_firm(tru_param, param, entrant)
+entered_firm # equilibrium entered firm number (This is dependent variable)
+Z # Check firm observable fixed costs
 
-function entry_probit(int_param::AbstractVector,param, X::AbstractVector, Z::AbstractVector, entrant::AbstractVector, depvar::AbstractVector, rng)
-    if int_param[2] < 0 
-        int_param[2] = 1
-    end
+
+function entry_probit(int_param::AbstractVector,param, X::AbstractVector, Z::AbstractVector, entrant::AbstractVector, depvar::AbstractVector)
+
     Pr_0 = zeros(Float64, param.M) #Pr(N=0)
     Pr_1 = zeros(Float64, param.M) #Pr(N=1)
     Pr_2 = zeros(Float64, param.M) #Pr(N>=2)
@@ -115,10 +111,16 @@ function entry_probit(int_param::AbstractVector,param, X::AbstractVector, Z::Abs
             Pr_0_k[k] = cdf(dis, -Π_m[k])
         end
         Pr_0[m] = prod.(eachcol(Pr_0_k))[1]
-        # Pr_1 : Most profitable (Lowest fixed cost) enters first
-        Pr_1[m] = cdf(dis,-Π_m[1]) * cdf(dis, Π_m[1] + int_param[3]) - (cdf(dis, Π_m[1] + int_param[3]) - cdf(dis,Π_m[1]))* (cdf(dis, Π_m[2] + int_param[3]))*(1 - cdf(dis, (Π_m[1]-Π_m[2])/2))
-        # Pr_2 : More than 2 firms enter
-        Pr_2[m] = 1 - Pr_1[m] - Pr_0[m]
+        
+        if entr_num == 2 
+            # Pr_2 : More than 2 firms enter
+            Pr_2[m] = cdf(dis, Π_m[1] - int_param[3]) * cdf(dis, Π_m[2] - int_param[3])
+            # Pr_1 : Most profitable (Lowest fixed cost) enters first
+            Pr_1[m] = 1 - Pr_0[m] - Pr_2[m]
+        elseif entr_num >= 3
+            Pr_1[m] = cdf(dis, Π_m[1])*cdf(dis, -Π_m[2] + int_param[3]) - (cdf(dis, -Π_m[1] + int_param[3]) - cdf(dis,-Π_m[1]))*cdf(dis,-Π_m[2]+int_param[3] - cdf(dis,-Π_m[2]))*(1- cdf(dis, (Π_m[2] - Π_m[1])/2))
+            Pr_2[m] = 1 - Pr_0[m] - Pr_1[m]
+        end
     end
     nofirm = depvar .== 0
     monopoly = depvar .== 1
@@ -126,15 +128,15 @@ function entry_probit(int_param::AbstractVector,param, X::AbstractVector, Z::Abs
     Pr_0[Pr_0 .<= 0.0] .= 1e-10
     Pr_1[Pr_1 .<= 0.0] .= 1e-10
     Pr_2[Pr_2 .<= 0.0] .= 1e-10
-        loglik = sum(nofirm .* log.(Pr_0) .+ monopoly.* log.(Pr_1) .+ moretwo .* log.(Pr_2))
+        loglik = sum(sum(nofirm .* log.(Pr_0) .+ monopoly.* log.(Pr_1) .+ moretwo .* log.(Pr_2)))
 
     return -loglik
 end
 
-entry_probit(tru_param, param, X, Z, entrant, equil_firm, seed)
+entry_probit(tru_param, param, X, Z, entrant, entered_firm)
 
 ## compute equilbrium firm numbers per market
-opt = Optim.optimize(vars -> entry_probit(vars, param, X, Z,entrant, equil_firm, seed),tru_param, Optim.Options(show_trace = true, g_tol = 1e-14))
+opt = Optim.optimize(vars -> entry_probit(vars, param, X, Z,entrant, entered_firm),tru_param, Optim.Options(show_trace = true, g_tol = 1e-14))
 opt.minimizer
 
 tru_param
