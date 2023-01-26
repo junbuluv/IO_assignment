@@ -1,5 +1,7 @@
-using Random, Statistics, Parameters, StatsBase, Distributions, Optim, ForwardDiff
-## generate data
+using Random, Statistics, Parameters, StatsBase, Distributions, Optim, ForwardDiff, Calculus, LinearAlgebra 
+#############################################################################################################################################
+################################################ Data generating ############################################################################
+#############################################################################################################################################
 """
 M = 250 : markets
 
@@ -49,10 +51,14 @@ Firms maximize their expost profit
 4-2. Pr(N=1) : One firm enters (Satisfying positive Duopoly, Monopoly profits)
 
 """
-
-
-# firm's observable characteristics Z ~ N(0,1) in each market : entrant_number X 1
 tru_param = [μ,σ,δ]
+
+
+#############################################################################################################################################
+################################################ Equilbrium firm calculation ################################################################
+#############################################################################################################################################
+
+
 function eq_firm_calc(tru_param::AbstractVector, other_param::parameters, market::AbstractVector, potential::AbstractVector)
     """ equilbrium entered firm calculation
     Input:
@@ -105,9 +111,16 @@ function eq_firm_calc(tru_param::AbstractVector, other_param::parameters, market
 end
 
 entered_firm, Z = eq_firm_calc(tru_param, param, X,entrant)
+
 entered_firm # equilibrium entered firm number (This is dependent variable)
 Z # Check firm observable fixed costs
 
+
+
+
+#############################################################################################################################################
+################################################ Probit estimator ###########################################################################
+#############################################################################################################################################
 
 function entry_probit(param1::AbstractVector, fixed_param::parameters, market::AbstractVector, firm_char::AbstractVector, potential::AbstractVector, eq_firm::AbstractVector)
     """ loglike function
@@ -175,14 +188,17 @@ end
 entry_probit(tru_param, param, X, Z, entrant, entered_firm)
 
 ## compute equilbrium firm numbers per market
-opt = Optim.optimize(vars -> entry_probit(vars, param, X, Z,entrant, entered_firm),tru_param, BFGS(), Optim.Options(show_trace = true, g_tol = 1e-14))
-opt.minimizer
+opt = Optim.optimize(vars -> entry_probit(vars, param, X, Z, entrant, entered_firm), ones(3), BFGS(), Optim.Options(show_trace = true, g_tol = 1e-14))
+estimates_probit = opt.minimizer
+hessian_probit = hessian( vars -> entry_probit(vars, param, X, Z, entrant, entered_firm)  )
+se_probit = diag(inv(hessian_probit(estimates_probit)))
 
 
 
-"""
-Simulated estimator
-"""
+
+#############################################################################################################################################
+################################################ Simulated estimator ########################################################################
+#############################################################################################################################################
 
 
 
@@ -202,7 +218,7 @@ function simulation(param1::AbstractVector, fixed_param::parameters, market::Abs
     u_m = Vector{Float64}[]
     for i in eachindex(potential)
         # unobservable part of firm generating
-        u_firm = rand(MersenneTwister(233),Normal(tru_param[1], tru_param[2]), potential[i])
+        u_firm = rand(MersenneTwister(1233),Normal(tru_param[1], tru_param[2]), potential[i])
         u_m = push!(u_m, u_firm)
     end
     for m in eachindex(potential) # Market m case
@@ -256,8 +272,5 @@ function simu_estimator(param1::AbstractVector, fixed_param::parameters, market:
     return ν[1]
 end
 
-
-
 opt = Optim.optimize(vars -> simu_estimator(vars, param, X, Z, entered_firm, entrant, 1000), ones(3), Optim.Options(show_trace = true, iterations = 10000))
-
-
+opt.minimizer
