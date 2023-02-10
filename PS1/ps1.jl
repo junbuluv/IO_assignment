@@ -43,19 +43,23 @@ Firms maximize their expost profit
 4-2. Pr(N=1) : One firm enters (Satisfying positive Duopoly, Monopoly profits)
 """
 tru_param = [μ,σ,δ]
+
+
+uf_num = rand(MersenneTwister(123), Normal(tru_param[1], tru_param[2]), sum(entrant, dims = 1)[1])
+z_firm = rand(Normal(0,1), sum(entrant, dims = 1)[1])
 u_firm_new = Vector{Float64}[]
 z_firm_new = Vector{Float64}[]
-for i in eachindex(entrant)
-        # unobservable part of firm generating
-        u_firm = rand(Normal(tru_param[1], tru_param[2]), entrant[i])
-        u_firm_new = push!(u_firm_new, u_firm)
+k = 1
+j = 0
+    for i in 1:length(entrant)
+        j += entrant[i]
+        temp_1 = uf_num[k:j]
+        temp_2 = z_firm[k:j]
+        u_firm_new = push!(u_firm_new, temp_1)
+        z_firm_new = push!(z_firm_new, temp_2)
+        k = j + 1
+    end
 
-        # observable part firm generating
-        z_firm = rand(Normal(0,1), entrant[i])
-        z_firm_new = push!(z_firm_new, z_firm)
-end
-u_firm_new
-z_firm_new
 
 """
 z_firm_new (Z_fm ~ N(0,1)) is fixed
@@ -320,7 +324,7 @@ function simulated_mm(param1::AbstractVector, param2::parameters, market::Abstra
 end
 
 
-opt = Optim.optimize(vars -> simulated_mm(vars, param, X, Z, entered_firm, entrant, 1000), ones(3), Optim.Options(show_trace = true, g_tol = 1e-14))
+opt = Optim.optimize(vars -> simulated_mm(vars, param, X, Z, entered_firm, entrant, 1000), ones(3), Optim.Options(show_trace = true, g_tol = 1e-7))
 estimates_msm = opt.minimizer
-hessian_probit = hessian( vars -> entry_probit(vars, param, X, Z, entrant, entered_firm)  )
-se_probit = abs.(diag(inv(hessian_probit(estimates_probit))))
+hessian_msm = hessian( vars -> simulated_mm(vars, param, X, Z, entrant, entered_firm)  )
+se_probit = (diag(inv(hessian_probit(estimates_msm))))
