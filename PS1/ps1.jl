@@ -159,7 +159,7 @@ function entry_probit(param1::AbstractVector, fixed_param::parameters, market::A
         end 
         
         
-        Pr_1[m] = cdf(dis, Π_m[1])*(1- cdf(dis, Π_m[2] - param1[3])) - (cdf(dis,Π_m[1]) - cdf(dis, Π_m[1] - param1[3])) * (cdf(dis,Π_m[2]) - cdf(dis,Π_m[2]-param1[3]))
+        Pr_1[m] = cdf(dis, Π_m[1])*(1- cdf(dis, Π_m[2] - param1[3])) - (cdf(dis,Π_m[1]) - cdf(dis, Π_m[1] - param1[3])) * (cdf(dis,Π_m[2]) - cdf(dis,Π_m[2]-param1[3])) * (cdf(dis, Π_m[1]- Π_m[2]))
         Pr_2[m] = 1 - Pr_0[m] - Pr_1[m]
         
     end
@@ -181,8 +181,8 @@ end
 entry_probit(tru_param, param, X, Z, entrant, entered_firm)
 
 ## compute equilbrium firm numbers per market
-opt = Optim.optimize(vars -> entry_probit(vars, param, X, Z, entrant, entered_firm), ones(3), BFGS(), Optim.Options(show_trace = true, g_tol = 1e-14))
-estimates_probit = opt.minimizer
+opt_probit = Optim.optimize(vars -> entry_probit(vars, param, X, Z, entrant, entered_firm), ones(3), BFGS(), Optim.Options(show_trace = true, g_tol = 1e-14))
+estimates_probit = opt_probit.minimizer
 hessian_probit = hessian( vars -> entry_probit(vars, param, X, Z, entrant, entered_firm)  )
 se_probit = diag(inv(hessian_probit(estimates_probit)))
 
@@ -324,7 +324,81 @@ function simulated_mm(param1::AbstractVector, param2::parameters, market::Abstra
 end
 
 
-opt = Optim.optimize(vars -> simulated_mm(vars, param, X, Z, entered_firm, entrant, 1000), ones(3), Optim.Options(show_trace = true, g_tol = 1e-7))
-estimates_msm = opt.minimizer
+opt1 = Optim.optimize(vars -> simulated_mm(vars, param, X, Z, entered_firm, entrant, 1000), ones(3), Optim.Options(show_trace = true, g_tol = 1e-7))
+estimates_msm = opt1.minimizer
 hessian_msm = hessian( vars -> simulated_mm(vars, param, X, Z, entrant, entered_firm)  )
-se_probit = (diag(inv(hessian_probit(estimates_msm))))
+se_msm = (diag(inv(hessian_probit(estimates_msm))))
+
+
+
+
+#############################################################################################################################################
+################################################ Moment inequality ##########################################################################
+#############################################################################################################################################
+
+
+"""
+1. Simulation procedure (Following Ciliberto and Tamer, 2009)
+    Step 1.  Transform the given matrix of epsilon draws into a draw with covariance matrix specified in θ. This is stored in ϵ^r
+    Here I follow random number generating I used in the previous question, also I redeclare X and Z for this estimation
+"""
+X_meq = copy(X)
+Z_meq = copy(z_firm_new)
+entrant_meq = copy(entrant)
+
+uf_meq = rand(MersenneTwister(123), Normal(tru_param[1], tru_param[2]), sum(entrant_meq, dims = 1)[1])
+u_firm_meq = Vector{Float64}[]
+k = 1
+j = 0
+    for i in 1:length(entrant_meq)
+        j += entrant_meq[i]
+        temp_1 = uf_meq[k:j]
+        u_firm_meq = push!(u_firm_meq, temp_1)
+        k = j + 1
+    end
+
+U_meq = copy(u_firm_meq)
+
+
+
+function make_dmatrix(k::Int64)                                            
+    t_num=2^k
+    index=Matrix{Int64}(undef, t_num, k)                                                      
+    i = 1
+    for i in 1:k
+        j = 1                                                                  
+        z = 1
+        c = Int64(t_num / (2^i))
+        while j <= t_num
+            if z <= c
+                index[j,i] = 1
+                z= z+1
+                j= j+1
+            else
+                j= j+c
+                z= 1
+            end
+        end
+    end
+    index[index .!= 1] .= 0
+    return index
+end
+## Firm 1 case at market 2 (has two potential entrant so j = 2^2)
+
+
+dmatrix = make_dmatrix(entrant_meq[1])
+delta_meq = ones(entrant_meq[1]-1)
+profit = zeros(eltype(Float64), 2^entrant_meq[1], entrant_meq[1])
+
+
+
+for i in 1:entrant_meq[1]
+        for j in 1:size(profit,1)
+            if dmatrix[j,i] == 1
+                profit[j,i] = X_meq[1] .- Z_meq[1][i] - dmatrix[:, 1:end .!= i][j,:]' * delta_meq
+            elseif dmatrix[j,i] == 0
+                profit[j,i] = 0
+            end
+        end
+end
+
