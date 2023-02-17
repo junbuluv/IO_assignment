@@ -96,23 +96,47 @@ function eq_firm_calc(tru_param::AbstractVector, other_param::parameters, market
         Π_m = x * other_param.β .- Z_m * other_param.α - U_f
         sort!(Π_m, rev= true)
         eq_entered[m] = 0
-        n = 1
-        while n < entr_num 
-            if Π_m[n] - tru_param[3] * log(n) >= 0
-                eq_entered[m] += 1
-            elseif Π_m[n] - tru_param[3] * log(n) < 0
-                eq_entered[m] = n-1
-            elseif Π_m[n] < 0
-                eq_entered = 0
-            end
-            n += 1
-        end
+        entrant_number = Vector(1:1:potential[m])
+        Profit = Π_m - tru_param[3] * log.(entrant_number)
+        eq_entered[m] = count(i -> (i>=0), Profit)
+        
     end
     return eq_entered  #250 X 1 vector, firm specific cost
 end
 
 entered_firm = eq_firm_calc(tru_param, param, X, entrant, z_firm_new, u_firm_new)
 entered_firm # equilibrium entered firm number (This is dependent variable)
+
+id_firm = Vector{Int64}[]    
+for i in eachindex(potential)
+    temp = zeros(eltype(Int64),potential[i])
+    if eq_firm[i] == 1
+        temp[1] = 1
+        push!(id_firm, temp)        
+    elseif eq_firm[i] == 2
+        temp[1:2] .= 1
+        push!(id_firm, temp)
+    elseif eq_firm[i] == 3
+        temp[1:3] .= 1
+        push!(id_firm, temp)
+    elseif eq_firm[i] == 4
+        temp[1:4] .= 1
+        push!(id_firm, temp)
+    elseif eq_firm[i] == 0
+        push!(id_firm, temp)
+    end
+end
+
+id_firm_eq = copy(id_firm)
+firmid_vec = zeros(eltype(Float64), sum(entrant, dims = 1)[1])
+i = 1
+g = 0
+for m in 1: param.M
+    g += length(id_firm_eq[m]) 
+    firmid_vec[i:g] = id_firm_eq[m]
+    i += length(id_firm_eq[m])
+end
+firmid_vec
 
 Z = copy(z_firm_new) # Check firm observable fixed costs
 
@@ -181,7 +205,7 @@ end
 entry_probit(tru_param, param, X, Z, entrant, entered_firm)
 
 ## compute equilbrium firm numbers per market
-opt_probit = Optim.optimize(vars -> entry_probit(vars, param, X, Z, entrant, entered_firm), ones(3), BFGS(), Optim.Options(show_trace = true, g_tol = 1e-14))
+opt_probit = Optim.optimize(vars -> entry_probit(vars, param, X, Z, entrant, entered_firm), ones(3), BFGS(), Optim.Options(show_trace = true, g_tol = 1e-7))
 estimates_probit = opt_probit.minimizer
 hessian_probit = hessian( vars -> entry_probit(vars, param, X, Z, entrant, entered_firm)  )
 se_probit = diag(inv(hessian_probit(estimates_probit)))
@@ -275,7 +299,7 @@ end
 
 
 
-function simulated_mm(param1::AbstractVector, param2::parameters, market::AbstractVector, firm_char::AbstractVector, eq_firm::AbstractVector, potential::AbstractVector, S::Int64)
+function simulated_mm(param1::AbstractVector, param2::parameters, market::AbstractVector, firm_char::AbstractVector, eq_firm::AbstractVector, eq_firm_vec::AbstractVector, potential::AbstractVector, S::Int64, mode)
     """
     Input:
     1. param1::AbstractVector : parameters of interest : μ, σ, δ
@@ -289,7 +313,10 @@ function simulated_mm(param1::AbstractVector, param2::parameters, market::Abstra
     Output:
     1. Criterion function value (N* - N_simulated)' * (N* - N_simulated)
     """
-    
+    if param1[2] < 0 
+        param1[2] = 1.0
+    end
+
     enter_firm = zeros(length(potential)*S)
     Z_m_temp = copy(firm_char)
     Z_m = repeat(Z_m_temp, S)
@@ -305,29 +332,73 @@ function simulated_mm(param1::AbstractVector, param2::parameters, market::Abstra
         temp = simu[k:j]
         u_firm = push!(u_firm, temp)
         k = j + 1
-    end
-        
+    end     
     
-        
-    for j in 1:length(firm_number)
-        Pi = param2.β * X_m[j] .- param2.α * Z_m[j] .- u_firm[j]
-        sort!(Pi, rev= true)
-        entrant_number = Vector(1:1:firm_number[j])
-        Profit = Pi - param1[3] * log.(entrant_number)
-        enter_firm[j] = count(i -> (i>=0), Profit)
+    if mode == "number"
+        for j in 1:length(firm_number)
+            Pi = param2.β * X_m[j] .- param2.α * Z_m[j] .- u_firm[j]
+            sort!(Pi, rev= true)
+            entrant_number = Vector(1:1:firm_number[j])
+            Profit = Pi - param1[3] * log.(entrant_number)
+            enter_firm[j] = count(i -> (i>=0), Profit)
+        end
+
+        proj_temp = reshape(enter_firm, param2.M, S)
+        proj = sum(proj_temp, dims = 2) / S
+        Q = (eq_firm - proj)' * (eq_firm - proj)
+        return Q[1] 
+    elseif mode == "identity"
+        phat = Vector{Int64}[]
+        for j in eachindex(firm_number)
+            Pi = param2.β * X_m[j] .- param2.α * Z_m[j] .- u_firm[j]
+            n_hat = count(i -> (i >= 0), Pi)
+            temp = zeros(eltype(Int64), firm_number[j])
+            if n_hat == 1
+                temp[1] = 1  
+                push!(phat, temp)
+            elseif n_hat == 2
+                temp[1:2] .= 1
+                push!(phat, temp)
+            elseif n_hat == 3
+                temp[1:3] .= 1
+                push!(phat, temp)
+            elseif n_hat == 4
+                temp[1:4] .= 1
+                push!(phat, temp)
+            elseif n_hat == 0
+                push!(phat, temp)
+            end
+        end
+        phat_temp = reshape(phat, param2.M, S)
+        temp_1 = Vector{Float64}[]
+        for m in 1: param2.M
+            push!(temp_1, sum(phat_temp[m,:]))
+        end
+        proj = temp_1 ./ 100
+
+        proj_vec = zeros(eltype(Float64), sum(potential, dims = 1)[1])
+        k = 1
+        j = 0
+        for m in 1: param2.M
+            j += length(proj[m]) 
+            proj_vec[k:j] = proj[m]
+            k += length(proj[m])
+        end
+
+        Q = (eq_firm_vec - proj_vec)' * (eq_firm_vec - proj_vec)
+
+        return Q[1]
     end
 
-    proj_temp = reshape(enter_firm, 250, S)
-    proj = sum(proj_temp, dims = 2) / S
-    Q = (eq_firm - proj)' * inv(var(eq_firm - proj)) * (eq_firm - proj)
-    return Q[1] 
 end
 
 
-opt1 = Optim.optimize(vars -> simulated_mm(vars, param, X, Z, entered_firm, entrant, 1000), ones(3), Optim.Options(show_trace = true, g_tol = 1e-7))
-estimates_msm = opt1.minimizer
-hessian_msm = hessian( vars -> simulated_mm(vars, param, X, Z, entrant, entered_firm)  )
-se_msm = (diag(inv(hessian_probit(estimates_msm))))
+
+opt_identity = Optim.optimize(vars -> simulated_mm(vars, param, X, Z, entered_firm, firmid_vec, entrant, 50, "identity"), ones(3), Optim.Options(show_trace = true, g_tol = 1e-7))
+estimates_identity = opt_identity.minimizer
+
+opt_number = Optim.optimize(vars -> simulated_mm(vars, param, X, Z, entered_firm, firmid_vec, entrant, 1000, "number"), ones(3), Optim.Options(show_trace = true, g_tol = 1e-7))
+estimates_msm = opt_number.minimizer
 
 
 
