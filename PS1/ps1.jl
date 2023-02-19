@@ -108,21 +108,21 @@ entered_firm = eq_firm_calc(tru_param, param, X, entrant, z_firm_new, u_firm_new
 entered_firm # equilibrium entered firm number (This is dependent variable)
 
 id_firm = Vector{Int64}[]    
-for i in eachindex(potential)
-    temp = zeros(eltype(Int64),potential[i])
-    if eq_firm[i] == 1
+for i in eachindex(entrant)
+    temp = zeros(eltype(Int64),entrant[i])
+    if entered_firm[i] == 1
         temp[1] = 1
         push!(id_firm, temp)        
-    elseif eq_firm[i] == 2
+    elseif entered_firm[i] == 2
         temp[1:2] .= 1
         push!(id_firm, temp)
-    elseif eq_firm[i] == 3
+    elseif entered_firm[i] == 3
         temp[1:3] .= 1
         push!(id_firm, temp)
-    elseif eq_firm[i] == 4
+    elseif entered_firm[i] == 4
         temp[1:4] .= 1
         push!(id_firm, temp)
-    elseif eq_firm[i] == 0
+    elseif entered_firm[i] == 0
         push!(id_firm, temp)
     end
 end
@@ -183,7 +183,7 @@ function entry_probit(param1::AbstractVector, fixed_param::parameters, market::A
         end 
         
         
-        Pr_1[m] = cdf(dis, Π_m[1])*(1- cdf(dis, Π_m[2] - param1[3])) - (cdf(dis,Π_m[1]) - cdf(dis, Π_m[1] - param1[3])) * (cdf(dis,Π_m[2]) - cdf(dis,Π_m[2]-param1[3])) * (cdf(dis, Π_m[1]- Π_m[2]))
+        Pr_1[m] = cdf(dis, Π_m[1])*(1- cdf(dis, Π_m[2] - param1[3])) - (cdf(dis,Π_m[1]) - cdf(dis, Π_m[1] - param1[3])) * (cdf(dis,Π_m[2]) - cdf(dis,Π_m[2]-param1[3])) * (cdf(dis, Π_m[1]- Π_m[2])/2)
         Pr_2[m] = 1 - Pr_0[m] - Pr_1[m]
         
     end
