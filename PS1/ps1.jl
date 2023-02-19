@@ -140,6 +140,10 @@ firmid_vec
 
 Z = copy(z_firm_new) # Check firm observable fixed costs
 
+for i in eachindex(entrant)
+    sort!(Z[i], rev = true)
+end
+
 
 
 
@@ -218,87 +222,6 @@ se_probit = diag(inv(hessian_probit(estimates_probit)))
 #############################################################################################################################################
 
 
-function simulation(param1::AbstractVector, fixed_param::parameters, market::AbstractVector, firm_char::AbstractVector, potential::AbstractVector)
-    """
-    Input:
-    1. delta::Float64 : parameters of interest, δ
-    2. fixed_param::parameters : other parameters [α, β, M]
-    3. market::AbstractVector - marketwide observables
-    4. firm_char::AbstractVector - firm observable characteristics : 'M X entrant[m]' m=1,...,M vector
-    5. potential::AbstractVector - potential entrants for each market
-
-    Output: 
-    1. simu::AbstractVector : simulated firm entry : M vector
-    """
-
-    u_m = Vector{Float64}[]
- 
-    for i in eachindex(potential)
-        # unobservable part of firm generating
-        u_firm = rand(Normal(param1[1], param1[2]), potential[i])
-        u_m = push!(u_m, u_firm)
-    end
-
-    simu = similar(potential) # Initialize M vector for simulated entered firm
-    for m in eachindex(potential) # Market m case
-      x = market[m]
-      entr_num = potential[m] # potential entrant
-      Z_m = firm_char[m]
-      U_f = u_m[m]
-      ## each firm's profit 
-      Π_m = zeros(eltype(Float64),entr_num)
-      Π_m = x * fixed_param.β .- Z_m * fixed_param.α - U_f
-      # order firms by profitability
-      sort!(Π_m, rev = true)
-      ## computed entered firm by profitability
-      simu[m] = 0
-      n = 1
-        while n < entr_num 
-            if Π_m[n] - param1[3] * log(n) >= 0
-                simu[m] += 1
-            elseif Π_m[n] - param1[3] * log(n) < 0
-                simu[m] = n-1
-            elseif Π_m[n] < 0
-                eq_entered = 0
-            end
-            n += 1
-        end
-    end
-    return simu
-end
-
-function simu_estimator(param1::AbstractVector, fixed_param::parameters, market::AbstractVector, firm_char::AbstractVector, eq_firm::AbstractVector , potential::AbstractVector ,S::Int64)
-    """
-    Input:
-    1. param1::AbstractVector : parameters of interest : μ, σ, δ
-    2. fixed_param::parameters : other parameters [α, β, M]
-    3. market::AbstractVector - marketwide observables
-    4. firm_char::AbstractVector - firm observable characteristics : 'M X entrant[m]' m=1,...,M vector
-    5. eq_firm::AbstractVector - equilbrium entered firm number for each market 'M' 
-    6. potential::AbstractVector - potential entrants for each market
-    7. S::Int64 - simulation number
-
-    Output:
-    1. Criterion function value (N* - N_simulated)' * (N* - N_simulated)
-    """
-    if param1[2] <0
-        param1[2] = 1
-    end
-
-    simu_firms = zeros(eltype(Float64), fixed_param.M, S)
-    for s in 1:S 
-        simu_firms[:,s] = simulation(param1, fixed_param, market, firm_char, potential)
-    end
-    p_firm = sum(simu_firms, dims = 2) ./ S
-    ν = zero(eltype(Float64))
-    ν = (eq_firm - p_firm)' * (eq_firm - p_firm)
-    return ν[1]
-end
-
-
-
-
-
 function simulated_mm(param1::AbstractVector, param2::parameters, market::AbstractVector, firm_char::AbstractVector, eq_firm::AbstractVector, eq_firm_vec::AbstractVector, potential::AbstractVector, S::Int64, mode)
     """
     Input:
@@ -346,7 +269,11 @@ function simulated_mm(param1::AbstractVector, param2::parameters, market::Abstra
         proj_temp = reshape(enter_firm, param2.M, S)
         proj = sum(proj_temp, dims = 2) / S
         Q = (eq_firm - proj)' * (eq_firm - proj)
-        return Q[1] 
+        Ω = inv((eq_firm - proj)' * (eq_firm - proj))
+        return Q[1]
+
+
+
     elseif mode == "identity"
         phat = Vector{Int64}[]
         for j in eachindex(firm_number)
@@ -386,6 +313,7 @@ function simulated_mm(param1::AbstractVector, param2::parameters, market::Abstra
         end
 
         Q = (eq_firm_vec - proj_vec)' * (eq_firm_vec - proj_vec)
+        Ω = inv((eq_firm_vec - proj_vec)' * (eq_firm_vec - proj_vec))
 
         return Q[1]
     end
@@ -393,12 +321,15 @@ function simulated_mm(param1::AbstractVector, param2::parameters, market::Abstra
 end
 
 
-
 opt_identity = Optim.optimize(vars -> simulated_mm(vars, param, X, Z, entered_firm, firmid_vec, entrant, 50, "identity"), ones(3), Optim.Options(show_trace = true, g_tol = 1e-7))
 estimates_identity = opt_identity.minimizer
 
-opt_number = Optim.optimize(vars -> simulated_mm(vars, param, X, Z, entered_firm, firmid_vec, entrant, 1000, "number"), ones(3), Optim.Options(show_trace = true, g_tol = 1e-7))
+opt_number = Optim.optimize(vars -> simulated_mm(vars, param, X, Z, entered_firm, firmid_vec, entrant, 500, "number"), ones(3), Optim.Options(show_trace = true, g_tol = 1e-7))
 estimates_msm = opt_number.minimizer
+
+simulated_mm(estimates_identity, param, X, Z, entered_firm, firmid_vec, entrant, 50, "identity")
+simulated_mm(estimates_msm, param, X, Z, entered_firm, firmid_vec, entrant, 500, "number")
+
 
 
 
