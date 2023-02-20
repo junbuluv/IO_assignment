@@ -140,10 +140,6 @@ firmid_vec
 
 Z = copy(z_firm_new) # Check firm observable fixed costs
 
-for i in eachindex(entrant)
-    sort!(Z[i], rev = true)
-end
-
 
 
 
@@ -222,6 +218,7 @@ se_probit = diag(inv(hessian_probit(estimates_probit)))
 #############################################################################################################################################
 
 
+
 function simulated_mm(param1::AbstractVector, param2::parameters, market::AbstractVector, firm_char::AbstractVector, eq_firm::AbstractVector, eq_firm_vec::AbstractVector, potential::AbstractVector, S::Int64, mode)
     """
     Input:
@@ -269,10 +266,7 @@ function simulated_mm(param1::AbstractVector, param2::parameters, market::Abstra
         proj_temp = reshape(enter_firm, param2.M, S)
         proj = sum(proj_temp, dims = 2) / S
         Q = (eq_firm - proj)' * (eq_firm - proj)
-        Ω = inv((eq_firm - proj)' * (eq_firm - proj))
-        return Q[1]
-
-
+        return Q[1] 
 
     elseif mode == "identity"
         phat = Vector{Int64}[]
@@ -313,7 +307,6 @@ function simulated_mm(param1::AbstractVector, param2::parameters, market::Abstra
         end
 
         Q = (eq_firm_vec - proj_vec)' * (eq_firm_vec - proj_vec)
-        Ω = inv((eq_firm_vec - proj_vec)' * (eq_firm_vec - proj_vec))
 
         return Q[1]
     end
@@ -321,15 +314,12 @@ function simulated_mm(param1::AbstractVector, param2::parameters, market::Abstra
 end
 
 
-opt_identity = Optim.optimize(vars -> simulated_mm(vars, param, X, Z, entered_firm, firmid_vec, entrant, 50, "identity"), ones(3), Optim.Options(show_trace = true, g_tol = 1e-7))
+
+opt_identity = Optim.optimize(vars -> simulated_mm(vars, param, X, Z, entered_firm, firmid_vec, entrant, 50, "identity"), ones(3), Optim.Options(show_trace = true, g_tol = 1e-5))
 estimates_identity = opt_identity.minimizer
 
-opt_number = Optim.optimize(vars -> simulated_mm(vars, param, X, Z, entered_firm, firmid_vec, entrant, 500, "number"), ones(3), Optim.Options(show_trace = true, g_tol = 1e-7))
+opt_number = Optim.optimize(vars -> simulated_mm(vars, param, X, Z, entered_firm, firmid_vec, entrant, 500, "number"), ones(3), Optim.Options(show_trace = true, g_tol = 1e-5))
 estimates_msm = opt_number.minimizer
-
-simulated_mm(estimates_identity, param, X, Z, entered_firm, firmid_vec, entrant, 50, "identity")
-simulated_mm(estimates_msm, param, X, Z, entered_firm, firmid_vec, entrant, 500, "number")
-
 
 
 
@@ -385,22 +375,81 @@ function make_dmatrix(k::Int64)
     index[index .!= 1] .= 0
     return index
 end
+## First stage empirical frequency estimator
+p_0 = count(i -> (i == 0), entered_firm) / length(entered_firm)
+p_1 = count(i -> (i == 1), entered_firm) / length(entered_firm)
+p_2 = count(i -> (i == 2), entered_firm) / length(entered_firm)
+p_3 = count(i -> (i == 3), entered_firm) / length(entered_firm)
+p_4 = count(i -> (i == 4), entered_firm) / length(entered_firm)
+check = p_0 + p_1 + p_2 + p_3 + p_4
+if check != 1.0 
+    println("empirical probability error")
+else
+    println("empirical probability okay")
+end
+dep_var = [p_0, p_1, p_2, p_3, p_4]
+
+S = 100
+# Draw simulation 
+simu_firm = repeat(entrant_meq, S)
+epsi = rand(MersenneTwister(123), Normal(tru_param[1], tru_param[2]), sum(simu_firm, dims = 1)[1])
+
+function unobs_conversion(ϵ::AbstractVector, firm::AbstractVector)
+    k = 1
+    u_firm = Vector{Float64}[]
+    j = 0
+    for i in 1:length(firm)
+        j += firm[i]
+        temp = ϵ[k:j]
+        u_firm = push!(u_firm, temp)
+        k = j + 1
+    end
+    return u_firm
+end     
+
+epsi_meq = unobs_conversion(epsi, simu_firm)
+epsi_simu = reshape(epsi_meq, param.M, S)
+
 ## Firm 1 case at market 2 (has two potential entrant so j = 2^2)
 
 
-dmatrix = make_dmatrix(entrant_meq[1])
-delta_meq = ones(entrant_meq[1]-1)
-profit = zeros(eltype(Float64), 2^entrant_meq[1], entrant_meq[1])
 
 
+profit = Array{Float64}(undef, 2^entrant_meq[1], entrant_meq[1], param.M)
+h_1 = zeros(eltype(Float64), 2^entrant_meq[1], entrant_meq[1], param.M)
+h_2 = zeros(eltype(Float64), 2^entrant_meq[1], entrant_meq[1], param.M)
 
-for i in 1:entrant_meq[1]
-        for j in 1:size(profit,1)
-            if dmatrix[j,i] == 1
-                profit[j,i] = X_meq[1] .- Z_meq[1][i] - dmatrix[:, 1:end .!= i][j,:]' * delta_meq
-            elseif dmatrix[j,i] == 0
-                profit[j,i] = 0
+
+epsi_simu[:,1][1]
+s = 1
+while s < 100
+    for m in eachindex(entrant_meq)        
+    dmatrix = make_dmatrix(entrant_meq[1])
+    delta_meq = ones(entrant_meq[1]-1)
+        for i in 1:entrant_meq[m]
+            for j in 1:size(profit,1)
+                if dmatrix[j,i] == 1
+                    profit[j,i,m] = X_meq[m] .- Z_meq[m][i] - dmatrix[:, 1:end .!= i][j,:]' * delta_meq - epsi_simu[:,s][m][i]
+                elseif dmatrix[j,i] == 0
+                profit[j,i,m] = 0
+                end
             end
         end
+        count_temp = zeros(eltype(Int64), 2^entrant_meq[m])
+        for j in eachindex(count_temp)
+            count_temp[j] = count(i -> (i > 0), profit[j,:,m])
+            for i in 1:entrant_meq[m]
+                if profit[j,i,m] > 0 && count_temp[j] == 1
+                    h_2[j,i,m] += 1.0
+                end
+                if profit[j,i,m] > 0
+                    h_1[j,i,m] += 1.0
+                end 
+            end 
+        end
+    end
+    s += 1
 end
 
+h_1 = h_1 / S
+h_2 = h_2 / S
