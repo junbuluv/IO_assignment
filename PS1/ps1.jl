@@ -272,6 +272,8 @@ function simulated_mm(param1::AbstractVector, param2::parameters, market::Abstra
         phat = Vector{Int64}[]
         for j in eachindex(firm_number)
             Pi = param2.β * X_m[j] .- param2.α * Z_m[j] .- u_firm[j]
+            #entrant_number = Vector(1:1:firm_number[j])
+            #Profit = Pi - param1[3] * log.(entrant_number)
             n_hat = count(i -> (i >= 0), Pi)
             temp = zeros(eltype(Int64), firm_number[j])
             if n_hat == 1
@@ -450,6 +452,7 @@ while s < 100
     end
     s += 1
 end
+
 
 h_1 = h_1 / S
 h_2 = h_2 / S
