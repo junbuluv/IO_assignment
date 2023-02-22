@@ -362,6 +362,7 @@ bt_2 = reshape(num, 3, 50)
 σ_se = sqrt(var(bt_1[2,:]))
 δ_se = sqrt(var(bt_1[3,:]))
 
+
 μ_se_num = sqrt(var(bt_2[1,:]))
 σ_se_num = sqrt(var(bt_2[2,:]))
 δ_se_num = sqrt(var(bt_2[3,:]))

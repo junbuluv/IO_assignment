@@ -107,7 +107,7 @@ decision = decision[2:end]
 f_num = f_num[2:end]
 
 
-data = DataFrame(index = market_index, Profit = Π, potential = entrant_data, d = decision, eq_fnum = f_num)
+data_1 = DataFrame(index = market_index, Profit = Π, potential = entrant_data, d = decision, eq_fnum = f_num)
 
 
 
@@ -118,7 +118,7 @@ data = DataFrame(index = market_index, Profit = Π, potential = entrant_data, d 
 
 
 
-#function simulated_mm(param1::AbstractVector, param2::parameters, market::AbstractVector, firm_char::AbstractVector, eq_firm::AbstractVector, eq_firm_vec::AbstractVector, potential::AbstractVector, S::Int64, mode)
+function simulated_mm(param1::AbstractVector, param2::parameters, data::DataFrame, entrant::AbstractVector, S::Int64)
     """
     Input:
     1. param1::AbstractVector : parameters of interest : μ, σ, δ
@@ -132,16 +132,21 @@ data = DataFrame(index = market_index, Profit = Π, potential = entrant_data, d 
     Output:
     1. Criterion function value (N* - N_simulated)' * (N* - N_simulated)
     """
-    if param1[2] < 0 
+    if param1[2] < 0.5
         param1[2] = 1.0
     end
-    S = 100
-
-    enter_firm = zeros(size(data,1)*S)
     Profit = repeat(copy(data.Profit),S)
     index = repeat(copy(data.index),S)
     eq_number = repeat(data.eq_fnum, S)
-    simu = rand(MersenneTwister(343), Normal(param1[1], param1[2]), sum(repeat(entrant,S), dims = 1)[1])
+    w = 1
+    simu = Vector{Float64}(undef,1)
+    while w < S+1
+        temp = rand(MersenneTwister(w+100), Normal(param1[1], param1[2]), sum(entrant, dims = 1)[1])
+        simu = append!(simu, temp)
+        w += 1
+    end
+    simu = simu[2:end]
+
     dec = repeat(copy(data.d),S)
     s_index = reshape(repeat(Vector(1:1:S)',729), 729 *S)
 
@@ -149,109 +154,43 @@ data = DataFrame(index = market_index, Profit = Π, potential = entrant_data, d 
     temp_data = DataFrame(i = index, P = Profit, si = simu, d = dec, eq= eq_number, si_index = s_index)
 
 
-    eq_msm = zeros(eltype(Int64), param.M, S)
+    eq_msm = zeros(eltype(Int64), param2.M, S)
     d_msm = Array{Int64}(undef, 1)
     f_msm = Array{Int64}(undef, 1)
     m = 1
     s = 1
 
-while s < S+1
-    for m in eachindex(entrant)
-        obs = temp_data.P[(temp_data.i .== m) .& (temp_data.si_index .== s)]
-        temp = obs - log.(Vector(1:1:entrant[m])) - temp_data.si[(temp_data.i .== m) .& (temp_data.si_index .== s)]
-        eq_msm[m,s] = count(i -> (i > 0), temp)
-        if eq_msm[m,s] == 0
-            temp1 = zeros(eltype(Int64), entrant[m])
-            temp2 = zeros(eltype(Int64), entrant[m]) 
-        elseif eq_msm[m,s] > 0
-            temp1 = zeros(eltype(Int64), entrant[m])
-            temp2 = ones(eltype(Int64), entrant[m])
-            temp2 = temp2 .* eq_msm[m,s]
-            temp1[1:eq_msm[m,s]] .= 1
-        end
-        append!(d_msm, temp1)
-        append!(f_msm, temp2)    
-    end  
-    s += 1
-end
+    while s < S+1
+        for m in eachindex(entrant)
+            obs = temp_data.P[(temp_data.i .== m) .& (temp_data.si_index .== s)]
+            temp = obs - log.(Vector(1:1:entrant[m])) - temp_data.si[(temp_data.i .== m) .& (temp_data.si_index .== s)]
+            eq_msm[m,s] = count(i -> (i > 0), temp)
+            if eq_msm[m,s] == 0
+                temp1 = zeros(eltype(Int64), entrant[m])
+                temp2 = zeros(eltype(Int64), entrant[m]) 
+            elseif eq_msm[m,s] > 0
+                temp1 = zeros(eltype(Int64), entrant[m])
+                temp2 = ones(eltype(Int64), entrant[m])
+                temp2 = temp2 .* eq_msm[m,s]
+                temp1[1:eq_msm[m,s]] .= 1
+            end
+            append!(d_msm, temp1)
+            append!(f_msm, temp2)    
+        end  
+        s += 1
+    end
     
 
-d_msm = d_msm[2:end]
-f_msm = f_msm[2:end]
+    proj = vcat(d_msm[2:end], f_msm[2:end])
 
-moment = hcat(temp_data.d - d_msm, temp_data.eq - f_msm)
-Q = moment' * moment
-
-
-
-    if mode == "number"
-        for j in 1:length(firm_number)
-            Pi = param2.β * X_m[j] .- param2.α * Z_m[j] .- u_firm[j]
-            sort!(Pi, rev= true)
-            entrant_number = Vector(1:1:firm_number[j])
-            Profit = Pi - param1[3] * log.(entrant_number)
-            enter_firm[j] = count(i -> (i>=0), Profit)
-        end
-
-        proj_temp = reshape(enter_firm, param2.M, S)
-        proj = sum(proj_temp, dims = 2) / S
-        Q = (eq_firm - proj)' * (eq_firm - proj)
-        return Q[1] 
-
-    elseif mode == "identity"
-        phat = Vector{Int64}[]
-        for j in eachindex(firm_number)
-            Pi = param2.β * X_m[j] .- param2.α * Z_m[j] .- u_firm[j]
-            #entrant_number = Vector(1:1:firm_number[j])
-            #Profit = Pi - param1[3] * log.(entrant_number)
-            n_hat = count(i -> (i >= 0), Pi)
-            temp = zeros(eltype(Int64), firm_number[j])
-            if n_hat == 1
-                temp[1] = 1  
-                push!(phat, temp)
-            elseif n_hat == 2
-                temp[1:2] .= 1
-                push!(phat, temp)
-            elseif n_hat == 3
-                temp[1:3] .= 1
-                push!(phat, temp)
-            elseif n_hat == 4
-                temp[1:4] .= 1
-                push!(phat, temp)
-            elseif n_hat == 0
-                push!(phat, temp)
-            end
-        end
-        phat_temp = reshape(phat, param2.M, S)
-        temp_1 = Vector{Float64}[]
-        for m in 1: param2.M
-            push!(temp_1, sum(phat_temp[m,:]))
-        end
-        proj = temp_1 ./ 100
-
-        proj_vec = zeros(eltype(Float64), sum(potential, dims = 1)[1])
-        k = 1
-        j = 0
-        for m in 1: param2.M
-            j += length(proj[m]) 
-            proj_vec[k:j] = proj[m]
-            k += length(proj[m])
-        end
-
-        Q = (eq_firm_vec - proj_vec)' * (eq_firm_vec - proj_vec)
-
-        return Q[1]
-    end
-
-#end
+    moment = (vcat(temp_data.d, temp_data.eq) - proj)
+    Q = moment' * moment
+end
 
 
+opt_identity = Optim.optimize(vars -> simulated_mm(vars, param, data_1, entrant, 50), ones(3), Optim.Options(show_trace = true, f_tol = 1e-5 ,g_tol = 1e-5))
+opt_identity.minimizer
 
-opt_identity = Optim.optimize(vars -> simulated_mm(vars, param, X, Z, entered_firm, firmid_vec, entrant, 50, "identity"), ones(3), Optim.Options(show_trace = true, g_tol = 1e-5))
-estimates_identity = opt_identity.minimizer
-
-opt_number = Optim.optimize(vars -> simulated_mm(vars, param, X, Z, entered_firm, firmid_vec, entrant, 500, "number"), ones(3), Optim.Options(show_trace = true, g_tol = 1e-5))
-estimates_msm = opt_number.minimizer
 
 
 
