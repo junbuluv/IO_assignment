@@ -1,4 +1,4 @@
-using Random, Statistics, Parameters, StatsBase, Distributions, Optim, ForwardDiff, Calculus, LinearAlgebra 
+using Random, Statistics, Parameters, StatsBase, Distributions, Optim, ForwardDiff, Calculus, LinearAlgebra, DataFrames
 #############################################################################################################################################
 ################################################ Data generating ############################################################################
 #############################################################################################################################################
@@ -47,168 +47,67 @@ tru_param = [μ,σ,δ]
 
 uf_num = rand(MersenneTwister(123), Normal(tru_param[1], tru_param[2]), sum(entrant, dims = 1)[1])
 z_firm = rand(Normal(0,1), sum(entrant, dims = 1)[1])
-u_firm_new = Vector{Float64}[]
-z_firm_new = Vector{Float64}[]
 k = 1
-j = 0
-    for i in 1:length(entrant)
-        j += entrant[i]
-        temp_1 = uf_num[k:j]
-        temp_2 = z_firm[k:j]
-        u_firm_new = push!(u_firm_new, temp_1)
-        z_firm_new = push!(z_firm_new, temp_2)
-        k = j + 1
-    end
-
-
-"""
-z_firm_new (Z_fm ~ N(0,1)) is fixed
-"""
-
-#############################################################################################################################################
-################################################ Equilbrium firm calculation ################################################################
-#############################################################################################################################################
-
-
-function eq_firm_calc(tru_param::AbstractVector, other_param::parameters, market::AbstractVector, potential::AbstractVector, Z::AbstractVector, U::AbstractVector)
-    """ equilbrium entered firm calculation
-    Input:
-    1. tru_param::AbstractVector : true parameters - [μ, σ, δ] 
-    2. other_param::parameters : other true parameters [α, β, M]
-    3. Market::AbstractVector - market observables
-    4. potential::AbstractVector - potential entrants for each market (M vector)
-    5. Z::AbstractVector - firm observable costs
-    6. U::AbstractVector - firm fixed cost unobservables 
-    Output: 
-    1. eq_entered::AbstractVector : equilbrium entered firm number
-    """
-    # Initialization
-    ## equilbrium firm entry : Most profitably firms enter firm
-    #Profit : Π = X*β - (Z * α + u_firm)   
-    eq_entered = zeros(eltype(Int64),length(potential))
-    Π = similar(Z)
-    for m in eachindex(potential)
-        x = market[m]
-        entr_num = potential[m]
-        Z_m = Z[m]
-        U_f = U[m]
-        Π_m = zeros(eltype(Float64),entr_num)
-        Π_m = x * other_param.β .- Z_m * other_param.α - U_f
-        sort!(Π_m, rev= true)
-        eq_entered[m] = 0
-        entrant_number = Vector(1:1:potential[m])
-        Profit = Π_m - tru_param[3] * log.(entrant_number)
-        eq_entered[m] = count(i -> (i>=0), Profit)
-        
-    end
-    return eq_entered  #250 X 1 vector, firm specific cost
+market_index = Vector{Int64}(undef,1)
+for m in eachindex(entrant)
+    temp = ones(eltype(Int64), entrant[m]) * k
+    market_index = append!(market_index, temp)
+    k += 1
 end
 
-entered_firm = eq_firm_calc(tru_param, param, X, entrant, z_firm_new, u_firm_new)
-entered_firm # equilibrium entered firm number (This is dependent variable)
+market_index = market_index[2:end]
 
-id_firm = Vector{Int64}[]    
-for i in eachindex(entrant)
-    temp = zeros(eltype(Int64),entrant[i])
-    if entered_firm[i] == 1
-        temp[1] = 1
-        push!(id_firm, temp)        
-    elseif entered_firm[i] == 2
-        temp[1:2] .= 1
-        push!(id_firm, temp)
-    elseif entered_firm[i] == 3
-        temp[1:3] .= 1
-        push!(id_firm, temp)
-    elseif entered_firm[i] == 4
-        temp[1:4] .= 1
-        push!(id_firm, temp)
-    elseif entered_firm[i] == 0
-        push!(id_firm, temp)
-    end
+X_data = Vector{Float64}(undef,1)
+entrant_data = Vector{Int64}(undef,1)
+for m in eachindex(entrant)
+    temp = ones(eltype(Float64), entrant[m]) .* X[m]
+    X_data = append!(X_data , temp)
+    temp2 = ones(eltype(Int64), entrant[m]) .* entrant[m]
+    entrant_data = append!(entrant_data, temp2)
 end
-
-id_firm_eq = copy(id_firm)
-firmid_vec = zeros(eltype(Float64), sum(entrant, dims = 1)[1])
-i = 1
-g = 0
-for m in 1: param.M
-    g += length(id_firm_eq[m]) 
-    firmid_vec[i:g] = id_firm_eq[m]
-    i += length(id_firm_eq[m])
-end
-firmid_vec
-
-Z = copy(z_firm_new) # Check firm observable fixed costs
-
-
-
-
-#############################################################################################################################################
-################################################ Probit estimator ###########################################################################
-#############################################################################################################################################
-
-function entry_probit(param1::AbstractVector, fixed_param::parameters, market::AbstractVector, firm_char::AbstractVector, potential::AbstractVector, eq_firm::AbstractVector)
-    """ loglike function
-    Input:
-    1. param1::AbstractVector : parameters of interest [μ, σ, δ] 
-    2. fixed_param::parameters : other parameters [α, β, M]
-    3. market::AbstractVector - marketwide observables : X (M vector)
-    4. firm_char::AbstractVector - firm observable characteristics : 'M X entrant[m]' m=1,...,M vector
-    5. potential::AbstractVector - potential entrants for each market (M vector)
-    Output: 
-    1. -loglik::Float64 : negative loglik value 
-    """
-    if param1[2] <0
-        param1[2] = 1
-    end
-
-    Pr_0 = zeros(Float64, fixed_param.M) #Pr(N=0)
-    Pr_1 = zeros(Float64, fixed_param.M) #Pr(N=1)
-    Pr_2 = zeros(Float64, fixed_param.M) #Pr(N>=2)
-    dis = Normal(param1[1],param1[2])
-
-    for m in eachindex(potential) # Market m case
-        x = market[m]
-        Z_m = firm_char[m]
-        entr_num = potential[m]
-        ## each firm's profit 
-        Π_m = zeros(eltype(Float64),entr_num)
-        Π_m = x * fixed_param.β .- Z_m * fixed_param.α
-        # order firms by profitability
-        sort!(Π_m, rev = true)
-        # Pr_1 = The first profitable firm enters so the rest firms must have negative profits
-        Pr_0[m] = 1
-        for i in 1: entr_num
-            Pr_0[m] *= (1-cdf(dis,Π_m[i]))
-        end 
-        
-        
-        Pr_1[m] = cdf(dis, Π_m[1])*(1- cdf(dis, Π_m[2] - param1[3])) - (cdf(dis,Π_m[1]) - cdf(dis, Π_m[1] - param1[3])) * (cdf(dis,Π_m[2]) - cdf(dis,Π_m[2]-param1[3])) * (cdf(dis, Π_m[1]- Π_m[2])/2)
-        Pr_2[m] = 1 - Pr_0[m] - Pr_1[m]
-        
-    end
-
-
-    nofirm = eq_firm .== 0
-    monopoly = eq_firm .== 1
-    moretwo = eq_firm .>= 2
-    Pr_0[Pr_0 .<= 0.0] .= 1e-10
-    Pr_1[Pr_1 .<= 0.0] .= 1e-10
-    Pr_2[Pr_2 .<= 0.0] .= 1e-10
-        
     
-    loglik = sum(nofirm .* log.(Pr_0) .+ monopoly.* log.(Pr_1) .+ moretwo .* log.(Pr_2))
+entrant_data = entrant_data[2:end]
+X_data = X_data[2:end]
+Z_data = copy(z_firm)
+U_data = copy(uf_num)
 
-    return -loglik
-end
+observed = X_data - Z_data - U_data
+Π = Vector{Float64}(undef,1)
+k = 1
+for m in eachindex(entrant)
+    Π = append!(Π, sort!(observed[k : k - 1 + entrant[m]], rev = true))
+    k = k + entrant[m] 
+end 
+Π = Π[2:end]
 
-entry_probit(tru_param, param, X, Z, entrant, entered_firm)
 
-## compute equilbrium firm numbers per market
-opt_probit = Optim.optimize(vars -> entry_probit(vars, param, X, Z, entrant, entered_firm), ones(3), BFGS(), Optim.Options(show_trace = true, g_tol = 1e-7))
-estimates_probit = opt_probit.minimizer
-hessian_probit = hessian( vars -> entry_probit(vars, param, X, Z, entrant, entered_firm)  )
-se_probit = diag(inv(hessian_probit(estimates_probit)))
+df = DataFrame(index = market_index, Profit = Π, fnum = entrant_data, u_firm = U_data)
+eq_entered = zeros(eltype(Int64), param.M)
+decision = Vector{Int64}(undef,1)
+f_num = Vector{Int64}(undef,1)
+
+for m in eachindex(entrant)
+    obs = df.Profit[df.index .== m]
+    temp = obs - log.(Vector(1:1:entrant[m])) - U_data[df.index .== m]
+    eq_entered[m] = count(i -> (i > 0), temp)
+    if eq_entered[m] == 0
+        temp1 = zeros(eltype(Int64), entrant[m])
+        temp2 = zeros(eltype(Int64), entrant[m]) 
+    elseif eq_entered[m] > 0
+        temp1 = zeros(eltype(Int64), entrant[m])
+        temp2 = ones(eltype(Int64), entrant[m])
+        temp2 = temp2 .* eq_entered[m]
+        temp1[1:eq_entered[m]] .= 1
+    end
+    append!(decision, temp1)
+    append!(f_num, temp2)    
+end    
+    
+decision = decision[2:end]
+f_num = f_num[2:end]
+
+
+data = DataFrame(index = market_index, Profit = Π, potential = entrant_data, d = decision, eq_fnum = f_num)
 
 
 
@@ -219,7 +118,7 @@ se_probit = diag(inv(hessian_probit(estimates_probit)))
 
 
 
-function simulated_mm(param1::AbstractVector, param2::parameters, market::AbstractVector, firm_char::AbstractVector, eq_firm::AbstractVector, eq_firm_vec::AbstractVector, potential::AbstractVector, S::Int64, mode)
+#function simulated_mm(param1::AbstractVector, param2::parameters, market::AbstractVector, firm_char::AbstractVector, eq_firm::AbstractVector, eq_firm_vec::AbstractVector, potential::AbstractVector, S::Int64, mode)
     """
     Input:
     1. param1::AbstractVector : parameters of interest : μ, σ, δ
@@ -236,24 +135,55 @@ function simulated_mm(param1::AbstractVector, param2::parameters, market::Abstra
     if param1[2] < 0 
         param1[2] = 1.0
     end
+    S = 100
 
-    enter_firm = zeros(length(potential)*S)
-    Z_m_temp = copy(firm_char)
-    Z_m = repeat(Z_m_temp, S)
-    X_m_temp = copy(market)
-    X_m = repeat(X_m_temp, S)
-    firm_number = repeat(potential, S)
-    simu = rand(MersenneTwister(123), Normal(param1[1], param1[2]), sum(firm_number, dims = 1)[1])
-    k = 1
-    u_firm = Vector{Float64}[]
-    j = 0
-    for i in 1:length(firm_number)
-        j += firm_number[i]
-        temp = simu[k:j]
-        u_firm = push!(u_firm, temp)
-        k = j + 1
-    end     
+    enter_firm = zeros(size(data,1)*S)
+    Profit = repeat(copy(data.Profit),S)
+    index = repeat(copy(data.index),S)
+    eq_number = repeat(data.eq_fnum, S)
+    simu = rand(MersenneTwister(343), Normal(param1[1], param1[2]), sum(repeat(entrant,S), dims = 1)[1])
+    dec = repeat(copy(data.d),S)
+    s_index = reshape(repeat(Vector(1:1:S)',729), 729 *S)
+
+
+    temp_data = DataFrame(i = index, P = Profit, si = simu, d = dec, eq= eq_number, si_index = s_index)
+
+
+    eq_msm = zeros(eltype(Int64), param.M, S)
+    d_msm = Array{Int64}(undef, 1)
+    f_msm = Array{Int64}(undef, 1)
+    m = 1
+    s = 1
+
+while s < S+1
+    for m in eachindex(entrant)
+        obs = temp_data.P[(temp_data.i .== m) .& (temp_data.si_index .== s)]
+        temp = obs - log.(Vector(1:1:entrant[m])) - temp_data.si[(temp_data.i .== m) .& (temp_data.si_index .== s)]
+        eq_msm[m,s] = count(i -> (i > 0), temp)
+        if eq_msm[m,s] == 0
+            temp1 = zeros(eltype(Int64), entrant[m])
+            temp2 = zeros(eltype(Int64), entrant[m]) 
+        elseif eq_msm[m,s] > 0
+            temp1 = zeros(eltype(Int64), entrant[m])
+            temp2 = ones(eltype(Int64), entrant[m])
+            temp2 = temp2 .* eq_msm[m,s]
+            temp1[1:eq_msm[m,s]] .= 1
+        end
+        append!(d_msm, temp1)
+        append!(f_msm, temp2)    
+    end  
+    s += 1
+end
     
+
+d_msm = d_msm[2:end]
+f_msm = f_msm[2:end]
+
+moment = hcat(temp_data.d - d_msm, temp_data.eq - f_msm)
+Q = moment' * moment
+
+
+
     if mode == "number"
         for j in 1:length(firm_number)
             Pi = param2.β * X_m[j] .- param2.α * Z_m[j] .- u_firm[j]
@@ -313,7 +243,7 @@ function simulated_mm(param1::AbstractVector, param2::parameters, market::Abstra
         return Q[1]
     end
 
-end
+#end
 
 
 
@@ -418,13 +348,13 @@ epsi_simu = reshape(epsi_meq, param.M, S)
 
 
 profit = Array{Float64}(undef, 2^entrant_meq[1], entrant_meq[1], param.M)
-h_1 = zeros(eltype(Float64), 2^entrant_meq[1], param.M)
-h_2 = zeros(eltype(Float64), 2^entrant_meq[1], param.M)
+h_1 = zeros(eltype(Float64), 2^entrant_meq[1], entrant_meq[1], param.M)
+h_2 = zeros(eltype(Float64), 2^entrant_meq[1], entrant_meq[1], param.M)
 
 
+epsi_simu[:,1][1]
 s = 1
-S = 100
-while s < S
+while s < 100
     for m in eachindex(entrant_meq)        
     dmatrix = make_dmatrix(entrant_meq[1])
     delta_meq = ones(entrant_meq[1]-1)
@@ -440,12 +370,14 @@ while s < S
         count_temp = zeros(eltype(Int64), 2^entrant_meq[m])
         for j in eachindex(count_temp)
             count_temp[j] = count(i -> (i > 0), profit[j,:,m])
-            if any(i -> (i > 0), profit[j,:,m]) == true && count_temp[j] == 1
-                h_2[j,m] += 1.0
-            end
-            if any(i -> (i > 0), profit[j,:,m]) == true
-                h_1[j,m] += 1.0
-            end  
+            for i in 1:entrant_meq[m]
+                if profit[j,i,m] > 0 && count_temp[j] == 1
+                    h_2[j,i,m] += 1.0
+                end
+                if profit[j,i,m] > 0
+                    h_1[j,i,m] += 1.0
+                end 
+            end 
         end
     end
     s += 1
@@ -454,4 +386,3 @@ end
 
 h_1 = h_1 / S
 h_2 = h_2 / S
-
