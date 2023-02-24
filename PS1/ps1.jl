@@ -260,12 +260,70 @@ function simulated_mm(param1::AbstractVector, param2::parameters, market::Abstra
         proj = sum(proj_temp, dims = 2) / S
         Q = (eq_firm - proj)' * (eq_firm - proj)
         return Q[1] 
+    elseif mode =="numberrev"
+
+        for j in eachindex(firm_number)
+            Pi = param2.β * X_m[j] .- param2.α * Z_m[j] .- u_firm[j]
+            sort!(Pi, rev= false)
+            entrant_number = Vector(1:1:firm_number[j])
+            Profit = Pi - param1[3] * log.(entrant_number)
+            enter_firm[j] = count(i -> (i>=0), Profit)
+        end
+
+        proj_temp = reshape(enter_firm, param2.M, S)
+        proj = sum(proj_temp, dims = 2) / S
+        Q = (eq_firm - proj)' * (eq_firm - proj)
+        return Q[1] 
 
     elseif mode == "identity"
         decision_firm = Vector{Int64}[]
         for j in eachindex(firm_number)
             Pi = param2.β * X_m[j] .- param2.α * Z_m[j] .- u_firm[j]
             Pi_ranked = sort(Pi, rev = true)
+            entrant_number = Vector(1:1:firm_number[j])
+            Profit = Pi_ranked - param1[3] * log.(entrant_number)
+            enter_firm[j] = count(i -> (i >= 0), Profit)
+
+            temp1 = Profit + param1[3] * log.(entrant_number)
+            temp2 = round.(Pi; digits = 5)
+            temp3 = round.(temp1; digits = 5)
+            temp4 = zeros(eltype(Int64), firm_number[j])
+            for m in 1: firm_number[j]
+                temp4[m] = findall(temp2 .== temp3[m])[1]
+            end
+     
+            
+            temp_d = temp4 .<= eq_entered[j]
+            decision_firm = push!(decision_firm, temp_d)
+        end
+
+        d = Vector{Int64}(undef,1)
+        for m in eachindex(firm_number)
+            append!(d, decision_firm[m])
+        end
+        d = d[2:end]
+        d_temp = reshape(d, sum(potential), S)
+        d_eq = Vector{Float64}(undef,1)
+        for m in eachindex(potential)
+            append!(d_eq, eq_firm_vec[m])
+        end
+        d_eq = d_eq[2:end]
+
+        d_proj = sum(d_temp, dims = 2) ./ S
+
+        proj_2 = reshape(enter_firm, param2.M, S)
+        proj_num = sum(proj_2, dims = 2) / S
+        moment = vcat((eq_firm - proj_num), (d_eq - d_proj)) 
+
+        Q = moment' * moment
+
+        return Q[1]
+
+    elseif mode == "identityrev"
+        decision_firm = Vector{Int64}[]
+        for j in eachindex(firm_number)
+            Pi = param2.β * X_m[j] .- param2.α * Z_m[j] .- u_firm[j]
+            Pi_ranked = sort(Pi, rev = false)
             entrant_number = Vector(1:1:firm_number[j])
             Profit = Pi_ranked - param1[3] * log.(entrant_number)
             enter_firm[j] = count(i -> (i >= 0), Profit)
@@ -316,10 +374,20 @@ estimates_identity = opt_identity.minimizer
 opt_number = Optim.optimize(vars -> simulated_mm(vars, param, X, Z, entered_firm, f_dec, entrant, 200, "number"), ones(3), Optim.Options(show_trace = true, g_tol = 1e-5))
 estimates_msm = opt_number.minimizer
 
+opt_identity_rev = Optim.optimize(vars -> simulated_mm(vars, param, X, Z, entered_firm, f_dec, entrant, 200, "identityrev"), ones(3), Optim.Options(show_trace = true, g_tol = 1e-5))
+estimates_identity = opt_identity.minimizer
+
+
+opt_number_rev = Optim.optimize(vars -> simulated_mm(vars, param, X, Z, entered_firm, f_dec, entrant, 200, "numberrev"), ones(3), Optim.Options(show_trace = true, g_tol = 1e-5))
+estimates_msm = opt_number.minimizer
+
+
 
 function msm_bootstrap(param::parameters, X::AbstractVector, Z::AbstractVector, U::AbstractVector, entrant::AbstractVector, B::Int64)
     est_id = Vector{Float64}(undef,1)
     est_num = Vector{Float64}(undef,1)
+    est_id_rev = Vector{Float64}(undef,1)
+    est_num_rev = Vector{Float64}(undef,1)
     b = 0
     while b < B
         Z_bt = Vector{Float64}[]
@@ -337,17 +405,27 @@ function msm_bootstrap(param::parameters, X::AbstractVector, Z::AbstractVector, 
         opt_number = Optim.optimize(vars -> simulated_mm(vars, param, X, Z_bt, entered_firm, decision, entrant, 50, "number"), ones(3), Optim.Options(show_trace = false, g_tol = 1e-5))
         estimates_msm = opt_number.minimizer
         append!(est_num, estimates_identity)
+        opt_identity_rev = Optim.optimize(vars -> simulated_mm(vars, param, X, Z_bt, entered_firm, decision, entrant, 50, "identityrev"), ones(3), Optim.Options(show_trace = false, g_tol = 1e-5))
+        estimates_identity_rev = opt_identity_rev.minimizer
+        append!(est_id_rev, estimates_identity_rev)
+        opt_number_rev = Optim.optimize(vars -> simulated_mm(vars, param, X, Z_bt, entered_firm, decision, entrant, 50, "numberrev"), ones(3), Optim.Options(show_trace = false, g_tol = 1e-5))
+        estimates_number_rev = opt_number_rev.minimizer
+        append!(est_num_rev, estimates_number_rev)
+
+
 
         b += 1
     end
-    return (est_id[2:end], est_num[2:end])
+    return (est_id[2:end], est_num[2:end], est_id_rev[2:end], est_num_rev[2:end])
 end
 
-ident , num = msm_bootstrap(param, X, Z, u_firm_new, entrant, 50)
+ident , num, ident_rev, num_rev = msm_bootstrap(param, X, Z, u_firm_new, entrant, 20)
 
 
-bt_1 = reshape(ident, 3, 50)
-bt_2 = reshape(num, 3, 50)
+bt_1 = reshape(ident, 3, 20)
+bt_2 = reshape(num, 3, 20)
+bt_3 = reshape(ident_rev, 3, 20)
+bt_4 = reshape(num_rev,3, 20)
 
 μ_se =  sqrt(var(bt_1[1,:]))
 σ_se = sqrt(var(bt_1[2,:]))
@@ -357,6 +435,13 @@ bt_2 = reshape(num, 3, 50)
 σ_se_num = sqrt(var(bt_2[2,:]))
 δ_se_num = sqrt(var(bt_2[3,:]))
 
+μ_se_rev =  sqrt(var(bt_3[1,:]))
+σ_se_rev = sqrt(var(bt_3[2,:]))
+δ_se_rev = sqrt(var(bt_3[3,:]))
+
+μ_se_num_rev = sqrt(var(bt_4[1,:]))
+σ_se_num_rev = sqrt(var(bt_4[2,:]))
+δ_se_num_rev = sqrt(var(bt_4[3,:]))
 
 
 
