@@ -123,17 +123,12 @@ end
 
 
 
-
-
-
-
-
-
-
 entered_firm, firm_rank, decision = eq_firm_calc(tru_param, param, X, entrant, z_firm_new, u_firm_new)
 entered_firm # equilibrium entered firm number (This is dependent variable)
 firm_rank
 decision
+
+
 
 
 Z = copy(z_firm_new) # Check firm observable fixed costs
@@ -314,15 +309,15 @@ function simulated_mm(param1::AbstractVector, param2::parameters, market::Abstra
 end
 
 
-opt_identity = Optim.optimize(vars -> simulated_mm(vars, param, X, Z, entered_firm, decision, entrant, 100, "identity"), ones(3), Optim.Options(show_trace = true, g_tol = 1e-5))
+opt_identity = Optim.optimize(vars -> simulated_mm(vars, param, X, Z, entered_firm, f_dec, entrant, 200, "identity"), ones(3), Optim.Options(show_trace = true, g_tol = 1e-5))
 estimates_identity = opt_identity.minimizer
 
 
-opt_number = Optim.optimize(vars -> simulated_mm(vars, param, X, Z, entered_firm, decision, entrant, 100, "number"), ones(3), Optim.Options(show_trace = true, g_tol = 1e-5))
+opt_number = Optim.optimize(vars -> simulated_mm(vars, param, X, Z, entered_firm, f_dec, entrant, 200, "number"), ones(3), Optim.Options(show_trace = true, g_tol = 1e-5))
 estimates_msm = opt_number.minimizer
 
 
-function msm_bootstrap(param::parameters, X::AbstractVector, Z::AbstractVector, entered_firm::AbstractVector, firmid_vec::AbstractVector, entrant::AbstractVector, B::Int64)
+function msm_bootstrap(param::parameters, X::AbstractVector, Z::AbstractVector, U::AbstractVector, entrant::AbstractVector, B::Int64)
     est_id = Vector{Float64}(undef,1)
     est_num = Vector{Float64}(undef,1)
     b = 0
@@ -333,10 +328,13 @@ function msm_bootstrap(param::parameters, X::AbstractVector, Z::AbstractVector, 
             push!(Z_bt, temp)
         end
 
-        opt_identity = Optim.optimize(vars -> simulated_mm(vars, param, X, Z_bt, entered_firm, firmid_vec, entrant, 100, "identity"), ones(3), Optim.Options(show_trace = false, g_tol = 1e-5))
+        entered_firm, firm_rank, decision = eq_firm_calc(tru_param, param, X, entrant, Z_bt, U)
+
+
+        opt_identity = Optim.optimize(vars -> simulated_mm(vars, param, X, Z_bt, entered_firm, decision, entrant, 50, "identity"), ones(3), Optim.Options(show_trace = false, g_tol = 1e-5))
         estimates_identity = opt_identity.minimizer
         append!(est_id, estimates_identity)
-        opt_number = Optim.optimize(vars -> simulated_mm(vars, param, X, Z_bt, entered_firm, firmid_vec, entrant, 500, "number"), ones(3), Optim.Options(show_trace = false, g_tol = 1e-5))
+        opt_number = Optim.optimize(vars -> simulated_mm(vars, param, X, Z_bt, entered_firm, decision, entrant, 50, "number"), ones(3), Optim.Options(show_trace = false, g_tol = 1e-5))
         estimates_msm = opt_number.minimizer
         append!(est_num, estimates_identity)
 
@@ -345,7 +343,7 @@ function msm_bootstrap(param::parameters, X::AbstractVector, Z::AbstractVector, 
     return (est_id[2:end], est_num[2:end])
 end
 
-ident , num = msm_bootstrap(param, X, Z, entered_firm, decision, entrant, 50)
+ident , num = msm_bootstrap(param, X, Z, u_firm_new, entrant, 50)
 
 
 bt_1 = reshape(ident, 3, 50)
@@ -355,10 +353,10 @@ bt_2 = reshape(num, 3, 50)
 σ_se = sqrt(var(bt_1[2,:]))
 δ_se = sqrt(var(bt_1[3,:]))
 
-
 μ_se_num = sqrt(var(bt_2[1,:]))
 σ_se_num = sqrt(var(bt_2[2,:]))
 δ_se_num = sqrt(var(bt_2[3,:]))
+
 
 
 
