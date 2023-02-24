@@ -51,7 +51,7 @@ u_firm_new = Vector{Float64}[]
 z_firm_new = Vector{Float64}[]
 k = 1
 j = 0
-    for i in 1:length(entrant)
+    for i in eachindex(entrant)
         j += entrant[i]
         temp_1 = uf_num[k:j]
         temp_2 = z_firm[k:j]
@@ -87,6 +87,8 @@ function eq_firm_calc(tru_param::AbstractVector, other_param::parameters, market
     #Profit : Π = X*β - (Z * α + u_firm)   
     eq_entered = zeros(eltype(Int64),length(potential))
     Π = similar(Z)
+    rank_firm = Vector{Int64}[]
+    decision_firm = Vector{Int64}[]
     for m in eachindex(potential)
         x = market[m]
         entr_num = potential[m]
@@ -94,52 +96,49 @@ function eq_firm_calc(tru_param::AbstractVector, other_param::parameters, market
         U_f = U[m]
         Π_m = zeros(eltype(Float64),entr_num)
         Π_m = x * other_param.β .- Z_m * other_param.α - U_f
-        sort!(Π_m, rev= true)
+        Π_m_ranked =  sort(Π_m, rev= true)
         eq_entered[m] = 0
         entrant_number = Vector(1:1:potential[m])
-        Profit = Π_m - tru_param[3] * log.(entrant_number)
+
+        Profit = Π_m_ranked - tru_param[3] * log.(entrant_number)
         eq_entered[m] = count(i -> (i>=0), Profit)
+
+
+        temp1 = Profit + tru_param[3] * log.(entrant_number)
+        temp2 = round.(Π_m; digits = 5)
+        temp3 = round.(temp1; digits = 5)
+        temp4 = zeros(eltype(Int64), potential[m])
+        for j in 1: potential[m]
+            temp4[j] = findall(temp2 .== temp3[j])[1]
+        end
+        
+        rank_firm = push!(rank_firm, temp4)
+        temp_d = temp4 .<= eq_entered[m]
+        decision_firm = push!(decision_firm, temp_d)
+
         
     end
-    return eq_entered  #250 X 1 vector, firm specific cost
+    return eq_entered , rank_firm, decision_firm #250 X 1 vector, firm specific cost
 end
 
-entered_firm = eq_firm_calc(tru_param, param, X, entrant, z_firm_new, u_firm_new)
+
+
+
+
+
+
+
+
+
+entered_firm, firm_rank, decision = eq_firm_calc(tru_param, param, X, entrant, z_firm_new, u_firm_new)
 entered_firm # equilibrium entered firm number (This is dependent variable)
+firm_rank
+decision
 
-id_firm = Vector{Int64}[]    
-for i in eachindex(entrant)
-    temp = zeros(eltype(Int64),entrant[i])
-    if entered_firm[i] == 1
-        temp[1] = 1
-        push!(id_firm, temp)        
-    elseif entered_firm[i] == 2
-        temp[1:2] .= 1
-        push!(id_firm, temp)
-    elseif entered_firm[i] == 3
-        temp[1:3] .= 1
-        push!(id_firm, temp)
-    elseif entered_firm[i] == 4
-        temp[1:4] .= 1
-        push!(id_firm, temp)
-    elseif entered_firm[i] == 0
-        push!(id_firm, temp)
-    end
-end
-
-id_firm_eq = copy(id_firm)
-firmid_vec = zeros(eltype(Float64), sum(entrant, dims = 1)[1])
-i = 1
-g = 0
-for m in 1: param.M
-    g += length(id_firm_eq[m]) 
-    firmid_vec[i:g] = id_firm_eq[m]
-    i += length(id_firm_eq[m])
-end
-firmid_vec
 
 Z = copy(z_firm_new) # Check firm observable fixed costs
-
+f_dec = copy(decision)
+f_rank = copy(firm_rank)
 
 
 
@@ -211,8 +210,6 @@ hessian_probit = hessian( vars -> entry_probit(vars, param, X, Z, entrant, enter
 se_probit = diag(inv(hessian_probit(estimates_probit)))
 
 
-
-
 #############################################################################################################################################
 ################################################ Simulated estimator ########################################################################
 #############################################################################################################################################
@@ -247,6 +244,7 @@ function simulated_mm(param1::AbstractVector, param2::parameters, market::Abstra
     k = 1
     u_firm = Vector{Float64}[]
     j = 0
+    eq_entered = repeat(eq_firm, S)
     for i in eachindex(firm_number)
         j += firm_number[i]
         temp = simu[k:j]
@@ -269,50 +267,44 @@ function simulated_mm(param1::AbstractVector, param2::parameters, market::Abstra
         return Q[1] 
 
     elseif mode == "identity"
-        phat = Vector{Int64}[]
+        decision_firm = Vector{Int64}[]
         for j in eachindex(firm_number)
             Pi = param2.β * X_m[j] .- param2.α * Z_m[j] .- u_firm[j]
-            sort!(Pi, rev = true)
+            Pi_ranked = sort(Pi, rev = true)
             entrant_number = Vector(1:1:firm_number[j])
-            Profit = Pi - param1[3] * log.(entrant_number)
+            Profit = Pi_ranked - param1[3] * log.(entrant_number)
             enter_firm[j] = count(i -> (i >= 0), Profit)
-            n_hat = enter_firm[j]
-            temp = zeros(eltype(Int64), firm_number[j])
-            if n_hat == 1
-                temp[1] = 1  
-                push!(phat, temp)
-            elseif n_hat == 2
-                temp[1:2] .= 1
-                push!(phat, temp)
-            elseif n_hat == 3
-                temp[1:3] .= 1
-                push!(phat, temp)
-            elseif n_hat == 4
-                temp[1:4] .= 1
-                push!(phat, temp)
-            elseif n_hat == 0
-                push!(phat, temp)
+
+            temp1 = Profit + param1[3] * log.(entrant_number)
+            temp2 = round.(Pi; digits = 5)
+            temp3 = round.(temp1; digits = 5)
+            temp4 = zeros(eltype(Int64), firm_number[j])
+            for m in 1: firm_number[j]
+                temp4[m] = findall(temp2 .== temp3[m])[1]
             end
-        end
-        phat_temp = reshape(phat, param2.M, S)
-        temp_1 = Vector{Float64}[]
-        for m in 1: param2.M
-            push!(temp_1, sum(phat_temp[m,:]))
-        end
-        proj = temp_1 ./ 100
-        proj_vec = zeros(eltype(Float64), sum(potential, dims = 1)[1])
-
-        k = 1
-        j = 0
-        for m in 1: param2.M
-            j += length(proj[m]) 
-            proj_vec[k:j] = proj[m]
-            k += length(proj[m])
+     
+            
+            temp_d = temp4 .<= eq_entered[j]
+            decision_firm = push!(decision_firm, temp_d)
         end
 
-        proj_temp_2 = reshape(enter_firm, param2.M, S)
-        proj_2 = sum(proj_temp_2, dims = 2) / S
-        moment = vcat((eq_firm - proj_2), (eq_firm_vec - proj_vec)) 
+        d = Vector{Int64}(undef,1)
+        for m in eachindex(firm_number)
+            append!(d, decision_firm[m])
+        end
+        d = d[2:end]
+        d_temp = reshape(d, sum(potential), S)
+        d_eq = Vector{Float64}(undef,1)
+        for m in eachindex(potential)
+            append!(d_eq, eq_firm_vec[m])
+        end
+        d_eq = d_eq[2:end]
+
+        d_proj = sum(d_temp, dims = 2) ./ S
+
+        proj_2 = reshape(enter_firm, param2.M, S)
+        proj_num = sum(proj_2, dims = 2) / S
+        moment = vcat((eq_firm - proj_num), (d_eq - d_proj)) 
 
         Q = moment' * moment
 
@@ -322,11 +314,11 @@ function simulated_mm(param1::AbstractVector, param2::parameters, market::Abstra
 end
 
 
-opt_identity = Optim.optimize(vars -> simulated_mm(vars, param, X, Z, entered_firm, firmid_vec, entrant, 100, "identity"), ones(3), Optim.Options(show_trace = true, g_tol = 1e-5))
+opt_identity = Optim.optimize(vars -> simulated_mm(vars, param, X, Z, entered_firm, decision, entrant, 100, "identity"), ones(3), Optim.Options(show_trace = true, g_tol = 1e-5))
 estimates_identity = opt_identity.minimizer
 
 
-opt_number = Optim.optimize(vars -> simulated_mm(vars, param, X, Z, entered_firm, firmid_vec, entrant, 500, "number"), ones(3), Optim.Options(show_trace = true, g_tol = 1e-5))
+opt_number = Optim.optimize(vars -> simulated_mm(vars, param, X, Z, entered_firm, decision, entrant, 100, "number"), ones(3), Optim.Options(show_trace = true, g_tol = 1e-5))
 estimates_msm = opt_number.minimizer
 
 
@@ -353,7 +345,8 @@ function msm_bootstrap(param::parameters, X::AbstractVector, Z::AbstractVector, 
     return (est_id[2:end], est_num[2:end])
 end
 
-ident , num = msm_bootstrap(param, X, Z, entered_firm, firmid_vec, entrant, 50)
+ident , num = msm_bootstrap(param, X, Z, entered_firm, decision, entrant, 50)
+
 
 bt_1 = reshape(ident, 3, 50)
 bt_2 = reshape(num, 3, 50)
