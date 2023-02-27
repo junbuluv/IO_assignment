@@ -480,6 +480,11 @@ println("se(̂μ): ", round(μ_se_num_rev, digits =4) , " se(̂σ): ", round(σ_
 ################################################ Moment inequality ##########################################################################
 #############################################################################################################################################
 
+"""
+This part is incomplete.
+"""
+
+
 
 """
 1. Simulation procedure (Following Ciliberto and Tamer, 2009)
@@ -489,8 +494,9 @@ println("se(̂μ): ", round(μ_se_num_rev, digits =4) , " se(̂σ): ", round(σ_
 X_meq = copy(X)
 Z_meq = copy(z_firm_new)
 entrant_meq = copy(entrant)
-
+decision_meq = copy(decision)
 uf_meq = rand(MersenneTwister(123), Normal(tru_param[1], tru_param[2]), sum(entrant_meq, dims = 1)[1])
+
 u_firm_meq = Vector{Float64}[]
 k = 1
 j = 0
@@ -502,8 +508,6 @@ j = 0
     end
 
 U_meq = copy(u_firm_meq)
-
-
 
 function make_dmatrix(k::Int64)                                            
     t_num=2^k
@@ -527,24 +531,32 @@ function make_dmatrix(k::Int64)
     index[index .!= 1] .= 0
     return index
 end
-## First stage empirical frequency estimator
-p_0 = count(i -> (i == 0), entered_firm) / length(entered_firm)
-p_1 = count(i -> (i == 1), entered_firm) / length(entered_firm)
-p_2 = count(i -> (i == 2), entered_firm) / length(entered_firm)
-p_3 = count(i -> (i == 3), entered_firm) / length(entered_firm)
-p_4 = count(i -> (i == 4), entered_firm) / length(entered_firm)
-check = p_0 + p_1 + p_2 + p_3 + p_4
-if check != 1.0 
-    println("empirical probability error")
-else
-    println("empirical probability okay")
-end
-dep_var = [p_0, p_1, p_2, p_3, p_4]
 
-S = 100
-# Draw simulation 
-simu_firm = repeat(entrant_meq, S)
-epsi = rand(MersenneTwister(123), Normal(tru_param[1], tru_param[2]), sum(simu_firm, dims = 1)[1])
+function nonparam(eq_decision::AbstractVector, param2::parameters)
+    temp1 = Vector{Int64}(undef,1)
+    for m in eachindex(eq_decision)
+        if length(eq_decision[m]) == 3
+            temp = append!(eq_decision[m], zeros(1))
+            temp1 = append!(temp1, temp)
+        elseif length(eq_decision[m]) == 2
+            temp = append!(eq_decision[m], zeros(2))
+            temp1 = append!(temp1, temp)
+        elseif length(eq_decision[m]) == 4
+            temp1 = append!(temp1, eq_decision[m])
+        end
+    end
+    temp1 = temp1[2:end]
+    temp1 = reshape(temp1, param2.M, 4)
+    dmatrix = make_dmatrix(4)
+    bootemp = Matrix{Int64}(undef, param2.M, size(dmatrix,1))
+    for m in eachindex(eq_decision)
+        for j in eachindex(dmatrix[:,1])
+        bootemp[m,j] = temp1[m,:] == dmatrix[j,:]
+        end
+    end
+    res = sum(bootemp, dims = 1) ./ param2.M
+    return res
+end
 
 function unobs_conversion(ϵ::AbstractVector, firm::AbstractVector)
     k = 1
@@ -559,49 +571,67 @@ function unobs_conversion(ϵ::AbstractVector, firm::AbstractVector)
     return u_firm
 end     
 
-epsi_meq = unobs_conversion(epsi, simu_firm)
-epsi_simu = reshape(epsi_meq, param.M, S)
-
-## Firm 1 case at market 2 (has two potential entrant so j = 2^2)
 
 
 
 
-profit = Array{Float64}(undef, 2^entrant_meq[1], entrant_meq[1], param.M)
-h_1 = zeros(eltype(Float64), 2^entrant_meq[1], param.M)
-h_2 = zeros(eltype(Float64), 2^entrant_meq[1], param.M)
-
-
-s = 1
 S = 100
-while s < S
-    for m in eachindex(entrant_meq)        
-    dmatrix = make_dmatrix(entrant_meq[1])
-    delta_meq = ones(entrant_meq[1]-1)
-        for i in 1:entrant_meq[m]
-            for j in 1:size(profit,1)
-                if dmatrix[j,i] == 1
-                    profit[j,i,m] = X_meq[m] .- Z_meq[m][i] - dmatrix[:, 1:end .!= i][j,:]' * delta_meq - epsi_simu[:,s][m][i]
-                elseif dmatrix[j,i] == 0
-                profit[j,i,m] = 0
+# Draw simulation 
+function Qfunction(param1::AbstractVector, param2::parameters, entrant::AbstractVector, X::AbstractVector, Z::AbstractVector, S::Int64)
+    simu_firm = repeat(entrant, S)
+    epsi = rand(MersenneTwister(123), Normal(param1[1], param1[2]), sum(simu_firm, dims = 1)[1])
+
+    epsi_meq = unobs_conversion(epsi, simu_firm)
+    epsi_simu = reshape(epsi_meq, param2.M, S)
+
+    profit = Array{Float64}(undef, 2^entrant[1], entrant[1], param2.M)
+
+    h_1 = zeros(eltype(Float64), 2^entrant[1], param2.M)
+    h_2 = zeros(eltype(Float64), 2^entrant[1], param2.M)
+
+
+    s = 1
+    while s < S
+        for m in eachindex(entrant)        
+        dmatrix = make_dmatrix(entrant[1])
+        delta = [param1[3], param1[4], param1[5]]
+            for i in 1:entrant[m]
+                for j in 1:size(profit,1)
+                    if dmatrix[j,i] == 1
+                        profit[j,i,m] = X[m] .- Z[m][i] - dmatrix[:, 1:end .!= i][j,:]' * delta - epsi_simu[:,s][m][i]
+                    elseif dmatrix[j,i] == 0
+                    profit[j,i,m] = 0
+                    end
                 end
             end
-        end
-        count_temp = zeros(eltype(Int64), 2^entrant_meq[m])
-        for j in eachindex(count_temp)
-            count_temp[j] = count(i -> (i > 0), profit[j,:,m])
-            if any(i -> (i > 0), profit[j,:,m]) == true && count_temp[j] == 1
-                h_2[j,m] += 1.0
+            count_temp = zeros(eltype(Int64), 2^entrant[m])
+            for j in eachindex(count_temp)
+                count_temp[j] = count(i -> (i > 0), profit[j,:,m])
+                if any(i -> (i > 0), profit[j,:,m]) == true && count_temp[j] == 1
+                    h_2[j,m] += 1.0
+                end
+                if any(i -> (i > 0), profit[j,:,m]) == true
+                    h_1[j,m] += 1.0
+                end  
             end
-            if any(i -> (i > 0), profit[j,:,m]) == true
-                h_1[j,m] += 1.0
-            end  
         end
+        s += 1
     end
-    s += 1
+
+    h_1 = h_1 / S
+    h_2 = h_2 / S
+    h_1_sum = sum(h_1, dims = 2)[:]
+    h_2_sum = sum(h_2, dims = 2)[:]
+
+    h_1_sum = h_1_sum ./ param2.M
+    h_2_sum = h_2_sum ./ param2.M
+    return h_1_sum, h_2_sum
 end
 
-
-h_1 = h_1 / S
-h_2 = h_2 / S
+function test2(vars::AbstractVector, entrant::AbstractVector, X::AbstractVector, Z::AbstractVector, decision::AbstractVector, param2::parameters, S::Int64)
+    P = nonparam(decision, param2)[:]
+    H_1, H_2 = Qfunction(vars, param2, entrant, X, Z, S)
+    Q = (P- H_1) .+ (P - H_2)
+    return sum(Q)
+end
 
