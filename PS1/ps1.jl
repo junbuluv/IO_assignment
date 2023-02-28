@@ -403,7 +403,7 @@ end
 """
 1. Probit estimation
 """
-opt_probit = Optim.optimize(vars -> entry_probit(vars, param, X, Z, entrant, entered_firm), ones(3), BFGS(), Optim.Options(show_trace = true, g_tol = 1e-7))
+opt_probit = Optim.optimize(vars -> entry_probit(vars, param, X, Z, entrant, entered_firm), ones(3), BFGS(), Optim.Options(show_trace = false, g_tol = 1e-7))
 estimates_probit = opt_probit.minimizer
 hessian_probit = hessian( vars -> entry_probit(vars, param, X, Z, entrant, entered_firm)  )
 se_probit = diag(inv(hessian_probit(estimates_probit)))
@@ -415,16 +415,16 @@ println("se(̂μ): ", round(se_probit[1], digits =4) , " se(̂σ): ", round(se_p
 """
 2. Method of Simulated Moment estimation
 """
-opt_identity = Optim.optimize(vars -> simulated_mm(vars, param, X, Z, entered_firm, decision, entrant, 200, "identity"), ones(3), Optim.Options(show_trace = true, f_tol = 1e-7, g_tol = 1e-5))
+opt_identity = Optim.optimize(vars -> simulated_mm(vars, param, X, Z, entered_firm, decision, entrant, 200, "identity"), ones(3), Optim.Options(show_trace = false, f_tol = 1e-7, g_tol = 1e-5))
 estimates_identity = opt_identity.minimizer
 
-opt_number = Optim.optimize(vars -> simulated_mm(vars, param, X, Z, entered_firm, decision, entrant, 200, "number"), ones(3), Optim.Options(show_trace = true, f_tol = 1e-7, g_tol = 1e-5))
+opt_number = Optim.optimize(vars -> simulated_mm(vars, param, X, Z, entered_firm, decision, entrant, 200, "number"), ones(3), Optim.Options(show_trace = false, f_tol = 1e-7, g_tol = 1e-5))
 estimates_msm = opt_number.minimizer
 
-opt_identity_rev = Optim.optimize(vars -> simulated_mm(vars, param, X, Z, entered_firm, decision, entrant, 200, "identityrev"), ones(3), Optim.Options(show_trace = true, f_tol = 1e-7, g_tol = 1e-5))
+opt_identity_rev = Optim.optimize(vars -> simulated_mm(vars, param, X, Z, entered_firm, decision, entrant, 200, "identityrev"), ones(3), Optim.Options(show_trace = false, f_tol = 1e-7, g_tol = 1e-5))
 estimates_identity_rev = opt_identity_rev.minimizer
 
-opt_number_rev = Optim.optimize(vars -> simulated_mm(vars, param, X, Z, entered_firm, decision, entrant, 200, "numberrev"), ones(3), Optim.Options(show_trace = true, f_tol = 1e-7, g_tol = 1e-5))
+opt_number_rev = Optim.optimize(vars -> simulated_mm(vars, param, X, Z, entered_firm, decision, entrant, 200, "numberrev"), ones(3), Optim.Options(show_trace = false, f_tol = 1e-7, g_tol = 1e-5))
 estimates_msm_rev = opt_number_rev.minimizer
 
 
@@ -726,7 +726,7 @@ end
 ###################################################Estimation############################################################
 #########################################################################################################################
 
-opt_identity = Optim.optimize(vars -> Qfunction(vars, param, decision_meq, entrant_meq, X_meq, Z_meq, 100), ones(22), Optim.Options(show_trace = true, f_tol = 1e-5, g_tol = 1e-5))
+opt_identity = Optim.optimize(vars -> Qfunction(vars, param, decision_meq, entrant_meq, X_meq, Z_meq, 100), ones(22), Optim.Options(show_trace = false, f_tol = 1e-5, g_tol = 1e-5))
 opt_identity.minimizer
 
 
