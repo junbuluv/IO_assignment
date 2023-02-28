@@ -36,34 +36,26 @@ First stage
 2. Fixed cost: ϕ_{fm} = Z_{fm}α + u_{fm} , u_{fm} ~ N(μ,σ^2)
 3. Lowest fixed cost firms enter first (Define variable cost)
     π_{fm} = X_{m} * β - δ ln(N_{m}) - (Z_{fm}α + u_{fm}) 
-Second stage 
-Firms maximize their expost profit
-4. Pr(N=0), Pr(N=1), Pr(N>=2)
-4-1. Pr(N=0) : All the firms make less than zero profit
-4-2. Pr(N=1) : One firm enters (Satisfying positive Duopoly, Monopoly profits)
 """
+
 tru_param = [μ,σ,δ]
-
-
 uf_num = rand(MersenneTwister(123), Normal(tru_param[1], tru_param[2]), sum(entrant, dims = 1)[1])
 z_firm = rand(Normal(0,1), sum(entrant, dims = 1)[1])
 u_firm_new = Vector{Float64}[]
 z_firm_new = Vector{Float64}[]
 k = 1
 j = 0
-    for i in eachindex(entrant)
-        j += entrant[i]
-        temp_1 = uf_num[k:j]
-        temp_2 = z_firm[k:j]
-        u_firm_new = push!(u_firm_new, temp_1)
-        z_firm_new = push!(z_firm_new, temp_2)
-        k = j + 1
-    end
+
+for i in eachindex(entrant)
+    j += entrant[i]
+    temp_1 = uf_num[k:j]
+    temp_2 = z_firm[k:j]
+    u_firm_new = push!(u_firm_new, temp_1)
+    z_firm_new = push!(z_firm_new, temp_2)
+    k = j + 1
+end
 
 
-"""
-z_firm_new (Z_fm ~ N(0,1)) is fixed
-"""
 
 #############################################################################################################################################
 ################################################ Equilbrium firm calculation ################################################################
@@ -118,22 +110,22 @@ function eq_firm_calc(tru_param::AbstractVector, other_param::parameters, market
 
         
     end
-    return eq_entered , rank_firm, decision_firm #250 X 1 vector, firm specific cost
+    return eq_entered, decision_firm 
 end
 
 
+#############################################################################################################################################
+"""
+Data
+"""
 
-entered_firm, firm_rank, decision = eq_firm_calc(tru_param, param, X, entrant, z_firm_new, u_firm_new)
+entered_firm, decision = eq_firm_calc(tru_param, param, X, entrant, z_firm_new, u_firm_new)
 entered_firm # equilibrium entered firm number (This is dependent variable)
-firm_rank
-decision
-
-
-
-
+decision # equilibrium firm entry decision
 Z = copy(z_firm_new) # Check firm observable fixed costs
-f_dec = copy(decision)
-f_rank = copy(firm_rank)
+
+
+
 
 
 
@@ -196,13 +188,6 @@ function entry_probit(param1::AbstractVector, fixed_param::parameters, market::A
     return -loglik
 end
 
-entry_probit(tru_param, param, X, Z, entrant, entered_firm)
-
-## compute equilbrium firm numbers per market
-opt_probit = Optim.optimize(vars -> entry_probit(vars, param, X, Z, entrant, entered_firm), ones(3), BFGS(), Optim.Options(show_trace = true, g_tol = 1e-7))
-estimates_probit = opt_probit.minimizer
-hessian_probit = hessian( vars -> entry_probit(vars, param, X, Z, entrant, entered_firm)  )
-se_probit = diag(inv(hessian_probit(estimates_probit)))
 
 
 #############################################################################################################################################
@@ -214,16 +199,19 @@ se_probit = diag(inv(hessian_probit(estimates_probit)))
 function simulated_mm(param1::AbstractVector, param2::parameters, market::AbstractVector, firm_char::AbstractVector, eq_firm::AbstractVector, eq_firm_vec::AbstractVector, potential::AbstractVector, S::Int64, mode)
     """
     Input:
-    1. param1::AbstractVector : parameters of interest : μ, σ, δ
-    2. fixed_param::parameters : other parameters [α, β, M]
-    3. market::AbstractVector - marketwide observables
-    4. firm_char::AbstractVector - firm observable characteristics : 'M X entrant[m]' m=1,...,M vector
-    5. eq_firm::AbstractVector - equilbrium entered firm number for each market 'M' 
+    1. param1::AbstractVector: parameters of interest : μ, σ, δ
+    2. param2::parameters: other parameters [α, β, M]
+    3. market::AbstractVector: marketwide observables
+    4. firm_char::AbstractVector: firm observable characteristics : 'M X entrant[m]' m=1,...,M vector
+    5. eq_firm::AbstractVector: equilbrium entered firm number for each market 'M' 
+    6. eq_firm_vec::AbstractVector: equilbirium firm entry decisions
     6. potential::AbstractVector - potential entrants for each market
-    7. S::Int64 - simulation number
+    7. S::Int64: simulation number
+    8. mode: identity(identities + numbers), number, identity(reverse_order), and number(reverse_order).
 
     Output:
-    1. Criterion function value (N* - N_simulated)' * (N* - N_simulated)
+    1. Criterion function value (identity mode) Q(θ) = (Entry_decision* - decision_simulated, N* - N_simulated)' * W * (Entry_decision* - decision_simulated, N* - N_simulated)
+    2. Criterion function value (identity mode) Q(θ) = (N* - N_simulated)' * W * (N* - N_simulated)
     """
     if param1[2] < 0 
         param1[2] = 1.0
@@ -235,7 +223,7 @@ function simulated_mm(param1::AbstractVector, param2::parameters, market::Abstra
     X_m_temp = copy(market)
     X_m = repeat(X_m_temp, S)
     firm_number = repeat(potential, S)
-    simu = rand(MersenneTwister(123), Normal(param1[1], param1[2]), sum(firm_number, dims = 1)[1])
+    simu = rand(MersenneTwister(555), Normal(param1[1], param1[2]), sum(firm_number, dims = 1)[1])
     k = 1
     u_firm = Vector{Float64}[]
     j = 0
@@ -258,7 +246,8 @@ function simulated_mm(param1::AbstractVector, param2::parameters, market::Abstra
 
         proj_temp = reshape(enter_firm, param2.M, S)
         proj = sum(proj_temp, dims = 2) / S
-        Q = (eq_firm - proj)' * (eq_firm - proj)
+        moment = eq_firm - proj
+        Q = (moment)' * (moment)
         return Q[1] 
     elseif mode =="numberrev"
 
@@ -272,7 +261,8 @@ function simulated_mm(param1::AbstractVector, param2::parameters, market::Abstra
 
         proj_temp = reshape(enter_firm, param2.M, S)
         proj = sum(proj_temp, dims = 2) / S
-        Q = (eq_firm - proj)' * (eq_firm - proj)
+        moment = eq_firm - proj
+        Q = (moment)' * (moment)
         return Q[1] 
 
     elseif mode == "identity"
@@ -315,7 +305,7 @@ function simulated_mm(param1::AbstractVector, param2::parameters, market::Abstra
         proj_num = sum(proj_2, dims = 2) / S
         moment = vcat((eq_firm - proj_num), (d_eq - d_proj)) 
 
-        Q = moment' * moment
+        Q = (moment)' * (moment)
 
         return Q[1]
 
@@ -329,8 +319,8 @@ function simulated_mm(param1::AbstractVector, param2::parameters, market::Abstra
             enter_firm[j] = count(i -> (i >= 0), Profit)
 
             temp1 = Profit + param1[3] * log.(entrant_number)
-            temp2 = round.(Pi; digits = 5)
-            temp3 = round.(temp1; digits = 5)
+            temp2 = round.(Pi; digits = 6)
+            temp3 = round.(temp1; digits = 6)
             temp4 = zeros(eltype(Int64), firm_number[j])
             for m in 1: firm_number[j]
                 temp4[m] = findall(temp2 .== temp3[m])[1]
@@ -359,28 +349,12 @@ function simulated_mm(param1::AbstractVector, param2::parameters, market::Abstra
         proj_num = sum(proj_2, dims = 2) / S
         moment = vcat((eq_firm - proj_num), (d_eq - d_proj)) 
 
-        Q = moment' * moment
+        Q = (moment)' * (moment)
 
         return Q[1]
     end
 
 end
-
-
-opt_identity = Optim.optimize(vars -> simulated_mm(vars, param, X, Z, entered_firm, f_dec, entrant, 200, "identity"), ones(3), Optim.Options(show_trace = true, g_tol = 1e-5))
-estimates_identity = opt_identity.minimizer
-
-
-opt_number = Optim.optimize(vars -> simulated_mm(vars, param, X, Z, entered_firm, f_dec, entrant, 200, "number"), ones(3), Optim.Options(show_trace = true, g_tol = 1e-5))
-estimates_msm = opt_number.minimizer
-
-opt_identity_rev = Optim.optimize(vars -> simulated_mm(vars, param, X, Z, entered_firm, f_dec, entrant, 200, "identityrev"), ones(3), Optim.Options(show_trace = true, g_tol = 1e-5))
-estimates_identity = opt_identity.minimizer
-
-
-opt_number_rev = Optim.optimize(vars -> simulated_mm(vars, param, X, Z, entered_firm, f_dec, entrant, 200, "numberrev"), ones(3), Optim.Options(show_trace = true, g_tol = 1e-5))
-estimates_msm = opt_number.minimizer
-
 
 
 function msm_bootstrap(param::parameters, X::AbstractVector, Z::AbstractVector, U::AbstractVector, entrant::AbstractVector, B::Int64)
@@ -396,7 +370,7 @@ function msm_bootstrap(param::parameters, X::AbstractVector, Z::AbstractVector, 
             push!(Z_bt, temp)
         end
 
-        entered_firm, firm_rank, decision = eq_firm_calc(tru_param, param, X, entrant, Z_bt, U)
+        entered_firm, decision = eq_firm_calc(tru_param, param, X, entrant, Z_bt, U)
 
 
         opt_identity = Optim.optimize(vars -> simulated_mm(vars, param, X, Z_bt, entered_firm, decision, entrant, 50, "identity"), ones(3), Optim.Options(show_trace = false, g_tol = 1e-5))
@@ -419,13 +393,51 @@ function msm_bootstrap(param::parameters, X::AbstractVector, Z::AbstractVector, 
     return (est_id[2:end], est_num[2:end], est_id_rev[2:end], est_num_rev[2:end])
 end
 
-ident , num, ident_rev, num_rev = msm_bootstrap(param, X, Z, u_firm_new, entrant, 20)
 
 
-bt_1 = reshape(ident, 3, 20)
-bt_2 = reshape(num, 3, 20)
-bt_3 = reshape(ident_rev, 3, 20)
-bt_4 = reshape(num_rev,3, 20)
+#############################################################################################################################################
+#########################################   Estimation  #####################################################################################
+#############################################################################################################################################
+
+"""
+1. Probit estimation
+"""
+opt_probit = Optim.optimize(vars -> entry_probit(vars, param, X, Z, entrant, entered_firm), ones(3), BFGS(), Optim.Options(show_trace = true, g_tol = 1e-7))
+estimates_probit = opt_probit.minimizer
+hessian_probit = hessian( vars -> entry_probit(vars, param, X, Z, entrant, entered_firm)  )
+se_probit = diag(inv(hessian_probit(estimates_probit)))
+
+println("μ estimate: ", round(estimates_probit[1], digits =4), " σ estimate: ", round(estimates_probit[2],digits = 4), " δ estimate: ", round(estimates_probit[3], digits = 4))
+println("se(̂μ): ", round(se_probit[1], digits =4) , " se(̂σ): ", round(se_probit[2], digits =4), " se(̂δ): ", round(se_probit[3],digits =4) )
+
+
+"""
+2. Method of Simulated Moment estimation
+"""
+opt_identity = Optim.optimize(vars -> simulated_mm(vars, param, X, Z, entered_firm, decision, entrant, 200, "identity"), ones(3), Optim.Options(show_trace = true, f_tol = 1e-7, g_tol = 1e-5))
+estimates_identity = opt_identity.minimizer
+
+opt_number = Optim.optimize(vars -> simulated_mm(vars, param, X, Z, entered_firm, decision, entrant, 200, "number"), ones(3), Optim.Options(show_trace = true, f_tol = 1e-7, g_tol = 1e-5))
+estimates_msm = opt_number.minimizer
+
+opt_identity_rev = Optim.optimize(vars -> simulated_mm(vars, param, X, Z, entered_firm, decision, entrant, 200, "identityrev"), ones(3), Optim.Options(show_trace = true, f_tol = 1e-7, g_tol = 1e-5))
+estimates_identity_rev = opt_identity_rev.minimizer
+
+opt_number_rev = Optim.optimize(vars -> simulated_mm(vars, param, X, Z, entered_firm, decision, entrant, 200, "numberrev"), ones(3), Optim.Options(show_trace = true, f_tol = 1e-7, g_tol = 1e-5))
+estimates_msm_rev = opt_number_rev.minimizer
+
+
+
+"""
+3. Bootstrapping for standard errors
+"""
+B = 20
+ident , num, ident_rev, num_rev = msm_bootstrap(param, X, Z, u_firm_new, entrant, B)
+
+bt_1 = reshape(ident, 3, B)
+bt_2 = reshape(num, 3, B)
+bt_3 = reshape(ident_rev, 3, B)
+bt_4 = reshape(num_rev,3, B)
 
 μ_se =  sqrt(var(bt_1[1,:]))
 σ_se = sqrt(var(bt_1[2,:]))
@@ -443,12 +455,32 @@ bt_4 = reshape(num_rev,3, 20)
 σ_se_num_rev = sqrt(var(bt_4[2,:]))
 δ_se_num_rev = sqrt(var(bt_4[3,:]))
 
+"""
+4. Results
+"""
 
+println("Specification 1: Identity and Number: Correctly specified")
+println("μ estimate: ", round(estimates_identity[1], digits =4), " σ estimate: ", round(estimates_identity[2],digits = 4), " δ estimate: ", round(estimates_identity[3], digits = 4))
+println("se(̂μ): ", round(μ_se, digits =4) , " se(̂σ): ", round(σ_se, digits =4), " se(̂δ): ", round(δ_se, digits =4) )
+
+println("Specification 2: Number: Correctly specified")
+println("μ estimate: ", round(estimates_msm[1], digits =4), " σ estimate: ", round(estimates_msm[2],digits = 4), " δ estimate: ", round(estimates_msm[3], digits = 4))
+println("se(̂μ): ", round(μ_se_num, digits =4) , " se(̂σ): ", round(σ_se_num, digits =4), " se(̂δ): ", round(δ_se_num, digits =4) )
+
+println("Specification 3: Identity and Number: Inorrectly specified")
+println("μ estimate: ", round(estimates_identity_rev[1], digits =4), " σ estimate: ", round(estimates_identity_rev[2],digits = 4), " δ estimate: ", round(estimates_identity_rev[3], digits = 4))
+println("se(̂μ): ", round(μ_se_rev, digits =4) , " se(̂σ): ", round(σ_se_rev, digits =4), " se(̂δ): ", round(δ_se_rev, digits =4) )
+
+println("Specification 4: Number: Inorrectly specified")
+println("μ estimate: ", round(estimates_msm_rev[1], digits =4), " σ estimate: ", round(estimates_msm_rev[2],digits = 4), " δ estimate: ", round(estimates_msm_rev[3], digits = 4))
+println("se(̂μ): ", round(μ_se_num_rev, digits =4) , " se(̂σ): ", round(σ_se_num_rev, digits =4), " se(̂δ): ", round(δ_se_num_rev, digits =4) )
 
 
 #############################################################################################################################################
 ################################################ Moment inequality ##########################################################################
 #############################################################################################################################################
+
+
 
 
 """
@@ -459,21 +491,20 @@ bt_4 = reshape(num_rev,3, 20)
 X_meq = copy(X)
 Z_meq = copy(z_firm_new)
 entrant_meq = copy(entrant)
-
+decision_meq = copy(decision)
 uf_meq = rand(MersenneTwister(123), Normal(tru_param[1], tru_param[2]), sum(entrant_meq, dims = 1)[1])
+
 u_firm_meq = Vector{Float64}[]
 k = 1
 j = 0
-    for i in 1:length(entrant_meq)
-        j += entrant_meq[i]
-        temp_1 = uf_meq[k:j]
-        u_firm_meq = push!(u_firm_meq, temp_1)
-        k = j + 1
-    end
+for i in eachindex(entrant_meq)
+    j += entrant_meq[i]
+    temp_1 = uf_meq[k:j]
+    u_firm_meq = push!(u_firm_meq, temp_1)
+    k = j + 1
+end
 
 U_meq = copy(u_firm_meq)
-
-
 
 function make_dmatrix(k::Int64)                                            
     t_num=2^k
@@ -497,30 +528,56 @@ function make_dmatrix(k::Int64)
     index[index .!= 1] .= 0
     return index
 end
-## First stage empirical frequency estimator
-p_0 = count(i -> (i == 0), entered_firm) / length(entered_firm)
-p_1 = count(i -> (i == 1), entered_firm) / length(entered_firm)
-p_2 = count(i -> (i == 2), entered_firm) / length(entered_firm)
-p_3 = count(i -> (i == 3), entered_firm) / length(entered_firm)
-p_4 = count(i -> (i == 4), entered_firm) / length(entered_firm)
-check = p_0 + p_1 + p_2 + p_3 + p_4
-if check != 1.0 
-    println("empirical probability error")
-else
-    println("empirical probability okay")
-end
-dep_var = [p_0, p_1, p_2, p_3, p_4]
 
-S = 100
-# Draw simulation 
-simu_firm = repeat(entrant_meq, S)
-epsi = rand(MersenneTwister(123), Normal(tru_param[1], tru_param[2]), sum(simu_firm, dims = 1)[1])
+
+function nonparam(potential::AbstractVector, decision_eq::AbstractVector)
+    n_2 = count(i -> i == 2, potential)
+    n_3 = count(i -> i == 3, potential)
+    n_4 = count(i -> i == 4, potential)
+
+    p_2 = make_dmatrix(2)
+    p_3 = make_dmatrix(3)
+    p_4 = make_dmatrix(4)
+
+    pr_y2 = zeros(eltype(Int64), 2^2)
+    pr_y3 = zeros(eltype(Int64), 2^3)
+    pr_y4 = zeros(eltype(Int64), 2^4)
+
+
+    for m in eachindex(potential)
+        if length(decision_eq[m]) == 2
+            for j in eachindex(pr_y2)
+                if decision_eq[m] == p_2[j,:]
+                    pr_y2[j] += 1
+                end
+            end
+        elseif length(decision_eq[m]) == 3
+            for j in eachindex(pr_y3)
+                if decision_eq[m] == p_3[j,:]
+                    pr_y3[j] += 1
+                end
+            end
+        elseif length(decision_eq[m]) == 4
+            for j in eachindex(pr_y4)
+                if decision_eq[m] == p_4[j,:]
+                    pr_y4[j] += 1
+                end
+            end
+        end
+    end
+
+    Pr_2 = pr_y2 / n_2
+    Pr_3 = pr_y3 / n_3
+    Pr_4 = pr_y4 / n_4 
+
+    return Pr_2, Pr_3, Pr_4
+end
 
 function unobs_conversion(ϵ::AbstractVector, firm::AbstractVector)
     k = 1
     u_firm = Vector{Float64}[]
     j = 0
-    for i in 1:length(firm)
+    for i in eachindex(firm)
         j += firm[i]
         temp = ϵ[k:j]
         u_firm = push!(u_firm, temp)
@@ -529,49 +586,159 @@ function unobs_conversion(ϵ::AbstractVector, firm::AbstractVector)
     return u_firm
 end     
 
-epsi_meq = unobs_conversion(epsi, simu_firm)
-epsi_simu = reshape(epsi_meq, param.M, S)
-
-## Firm 1 case at market 2 (has two potential entrant so j = 2^2)
-
-
-
-
-profit = Array{Float64}(undef, 2^entrant_meq[1], entrant_meq[1], param.M)
-h_1 = zeros(eltype(Float64), 2^entrant_meq[1], param.M)
-h_2 = zeros(eltype(Float64), 2^entrant_meq[1], param.M)
-
-
-s = 1
 S = 100
-while s < S
-    for m in eachindex(entrant_meq)        
-    dmatrix = make_dmatrix(entrant_meq[1])
-    delta_meq = ones(entrant_meq[1]-1)
-        for i in 1:entrant_meq[m]
-            for j in 1:size(profit,1)
-                if dmatrix[j,i] == 1
-                    profit[j,i,m] = X_meq[m] .- Z_meq[m][i] - dmatrix[:, 1:end .!= i][j,:]' * delta_meq - epsi_simu[:,s][m][i]
-                elseif dmatrix[j,i] == 0
-                profit[j,i,m] = 0
+# Draw simulation 
+
+function Hfunction(param1::AbstractVector, param2::parameters, entrant::AbstractVector, X::AbstractVector, Z::AbstractVector, S::Int64)
+    if param1[2] < 0
+        param1[2] = 1
+    end
+    n_2 = count(i -> i == 2, entrant)
+    n_3 = count(i -> i == 3, entrant)
+    n_4 = count(i -> i == 4, entrant)
+    simu_firm = repeat(entrant, S)
+    epsi = Vector{Float64}(undef, 1)
+    for s in 1:S
+        temp = rand(MersenneTwister(123+s), Normal(param1[1], param1[2]), sum(entrant, dims = 1)[1])
+        epsi = append!(epsi, temp)
+    end
+    epsi = epsi[2:end]
+    epsi_meq = unobs_conversion(epsi, simu_firm)
+
+    X_eq = repeat(X, S)
+    Z_eq = repeat(Z, S)
+
+    h_1_2 = zeros(eltype(Float64), 2^2)
+    h_2_2 = zeros(eltype(Float64), 2^2)
+    h_1_3 = zeros(eltype(Float64), 2^3)
+    h_2_3 = zeros(eltype(Float64), 2^3)
+    h_1_4 = zeros(eltype(Float64), 2^4)
+    h_2_4 = zeros(eltype(Float64), 2^4)
+
+    d_2 = make_dmatrix(2)
+    d_3 = make_dmatrix(3)
+    d_4 = make_dmatrix(4)
+
+
+    for m in eachindex(X_eq)
+        if length(Z_eq[m]) == 2
+            profit = zeros(eltype(Float64), 2^2, 2)
+            delta_n2 = [param1[3], param1[4]]
+            for j in eachindex(h_1_2)
+                for i in eachindex(Z_eq[m])
+                    if d_2[j,i] == 0
+                        profit[j,i] = 0
+                    elseif d_2[j,i] == 1
+                        profit[j,i] = X_eq[m] .- Z_eq[m][i] .- epsi_meq[m][i] .- delta_n2[1:end .!= i]' * ones(1)
+                    end
+                end
+                
+                num = count(i -> i > 0, profit[j,:])
+                if (any(i-> i>0, profit[j,:]) == true) & (num == 1)
+                    h_1_2[j] += 1
+                end
+                if any(i-> i>0, profit[j,:]) == true 
+                    h_2_2[j] += 1
+                end
+
+            end
+            
+        elseif length(Z_eq[m]) == 3
+            profit = zeros(eltype(Float64), 2^3, 3)
+            delta_n3 = [param1[5] param1[6]; param1[7] param1[8] ; param1[9] param1[10]]
+            for j in eachindex(h_1_3)
+                for i in eachindex(Z_eq[m])
+                    if d_3[j,i] == 0
+                        profit[j,i] = 0
+                    elseif d_3[j,i] == 1
+                        profit[j,i] = X_eq[m] .- Z_eq[m][i] .- epsi_meq[m][i] .- delta_n3[i,:]' * ones(2)
+                    end
+                end
+
+
+                num = count(i -> i > 0, profit[j,:])
+                if (any(i-> i>0, profit[j,:]) == true) & (num == 1)
+                    h_1_3[j] += 1
+                end
+                if any(i-> i>0, profit[j,:]) == true 
+                    h_2_3[j] += 1
+                end
+            end
+
+
+        elseif length(Z_eq[m]) == 4
+            profit = zeros(eltype(Float64), 2^4, 4)
+            delta_n4 = [param1[11] param1[12] param1[13]; param1[14] param1[15] param1[16]; param1[17] param1[18] param1[19]; param1[20] param1[21] param1[22]]
+            for j in eachindex(h_1_4)
+                for i in eachindex(Z_eq[m])
+                    if d_4[j,i] == 0
+                        profit[j,i] = 0
+                    elseif d_4[j,i] == 1
+                        profit[j,i] = X_eq[m] .- Z_eq[m][i] .- epsi_meq[m][i] .- delta_n4[i,:]' * ones(3)
+                    end
+                end
+                num = count(i -> i > 0, profit[j,:])
+                if (any(i-> i>0, profit[j,:]) == true) & (num == 1)
+                    h_1_4[j] += 1
+                end
+                if any(i-> i>0, profit[j,:]) == true 
+                    h_2_4[j] += 1
                 end
             end
         end
-        count_temp = zeros(eltype(Int64), 2^entrant_meq[m])
-        for j in eachindex(count_temp)
-            count_temp[j] = count(i -> (i > 0), profit[j,:,m])
-            if any(i -> (i > 0), profit[j,:,m]) == true && count_temp[j] == 1
-                h_2[j,m] += 1.0
-            end
-            if any(i -> (i > 0), profit[j,:,m]) == true
-                h_1[j,m] += 1.0
-            end  
-        end
+        
+
+
     end
-    s += 1
+            
+    h_1_2 = h_1_2 / (n_2 * S)
+    h_2_2 = h_2_2 / (n_2 * S)
+    h_1_3 = h_1_3 / (n_3 * S)
+    h_2_3 = h_2_3 / (n_3 * S)
+    h_1_4 = h_1_4 / (n_4 * S)
+    h_2_4 = h_2_4 / (n_4 * S)
+    return h_1_2, h_2_2, h_1_3, h_2_3, h_1_4, h_2_4
 end
 
 
-h_1 = h_1 / S
-h_2 = h_2 / S
+function Qfunction(param1::AbstractVector, param2::parameters, decision::AbstractVector, entrant::AbstractVector, X::AbstractVector, Z::AbstractVector, S::Int64)
+    h12, h22, h13, h23, h14, h24 =  Hfunction(param1, param2, entrant, X, Z, S)
+    H1 = vcat(h12, h13, h14)
+    H2 = vcat(h22, h23, h24)
+    Pr = nonparam(entrant, decision)
+    p1 = Pr[1]
+    p2 = Pr[2]
+    p3 = Pr[3]
+    P = vcat(p1, p2, p3)
 
+    Q = (norm(P - H1) + norm(P - H2))
+    a = length(P - H1) / log(length(P - H1))
+
+    return a*Q
+end
+
+#########################################################################################################################
+###################################################Estimation############################################################
+#########################################################################################################################
+
+opt_identity = Optim.optimize(vars -> Qfunction(vars, param, decision_meq, entrant_meq, X_meq, Z_meq, 100), ones(22), Optim.Options(show_trace = true, f_tol = 1e-5, g_tol = 1e-5))
+opt_identity.minimizer
+
+
+
+"""
+This part is incomplete
+"""
+#########################################################################################################################
+#################################### Confidence Interval  ###############################################################
+#########################################################################################################################
+#########################################################################################################################
+samplesize = 7
+Z_bt = Vector{Float64}[]
+for i in 1:7
+    for m in eachindex(entrant)
+        temp = sample(MersenneTwister(123+i),Z_meq[m], entrant[m]; replace = true, ordered = false)
+        push!(Z_bt, temp)
+    end
+end
+Z_bt
