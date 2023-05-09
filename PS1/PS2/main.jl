@@ -1,5 +1,4 @@
-using Random, Statistics, Parameters, StatsBase, Distributions, Optim, ForwardDiff, Calculus, LinearAlgebra, Plots
-
+using Random, Statistics, Parameters, StatsBase, Distributions, Optim, ForwardDiff, Calculus, LinearAlgebra, Plots, DataFrames, CSV
 
 transition = [0.6 0.2 0.2 ; 0.2 0.6 0.2; 0.2 0.2 0.6]
 temp = copy(transition)
@@ -229,11 +228,10 @@ testing2 = norm(test2- test3) < 1e-10
 testing3 = norm(test2 - test3) < 1e-10
 testing4 = norm(test3 - test4) < 1e-10
 testing5 = norm(test4 - test5) < 1e-10
-firm_num_1 = [0,1,2,3,4]
 
-mu_1[:,1]
-mu_1[:,2]
-mu_1[:,3]
+
+firm_num_1 = [1,2,3,4]
+
 
 plot(firm_num, [
     mu_1[:,1],
@@ -244,10 +242,11 @@ xlabel!("Number of Firms")
 ylabel!("Scarp Value")
 savefig("myplot.png")
 
+
 plot(firm_num_1, [
-    gamma_1[:,1],
-    gamma_1[:,2],
-    gamma_1[:,3]],  label=["X_t = -5" "X_t = 0" "X_t = 5"])
+    gamma_1[2:end,1],
+    gamma_1[2:end,2],
+    gamma_1[2:end,3]],  label=["X_t = -5" "X_t = 0" "X_t = 5"])
 title!("Comparative Statics")
 xlabel!("Number of Firms")
 ylabel!("Entry Cost")
@@ -259,75 +258,166 @@ plot(firm_num, [
     Vbar_1[:,3]],  label=["X_t = -5" "X_t = 0" "X_t = 5"])
 title!("Comparative Statics")
 xlabel!("Number of Firms")
-ylabel!("Entry Cost")
+ylabel!("Value Function")
 savefig("myplot2.png")
 
 
 function firm_num_simu(today_n, state_idx, mu_eq, gamma_eq)
+    if today_n > 5
+        today_n = 5
+    end
     
     if today_n == 0
         gamma_simu = rand(Normal(param[3], param[4]),1)
-        entry_value = gamma_eq[1, state_idx]
-        tmr_n = today_n + sum(gamma_simu .> entry_value)    
-        entry_decision = sum(gamma_simu .> entry_value)
+        tmr_n = today_n + 1    
+        entry_decision = 1
         exit_decision = 0
     elseif today_n == 5
         mu_simu = rand(Normal(param[1], param[2]), today_n)
-        exit_value = ones(today_n, 1).* (mu_eq[today_n, state_idx])
-        tmr_N = today_n - sum(mu_simu .> exit_value)
+        exit_value = ones(today_n, 1).* (mu_eq[today_n-1, state_idx])
+        tmr_n = today_n - sum(mu_simu .> exit_value)
         entry_decision = 0
+        exit_decision = (mu_simu .> exit_value)
+    elseif today_n == 1
+        gamma_simu = rand(Normal(param[3],param[4]),1)
+        mu_simu = rand(Normal(param[1],param[2]), today_n)
+        entry_value = gamma_eq[2, state_idx]
+        exit_value = mu_eq[1, state_idx]
+        tmr_n = today_n - sum(mu_simu .> exit_value) + sum(gamma_simu .< entry_value) 
+        entry_decision = sum(gamma_simu .< entry_value)
         exit_decision = (mu_simu .> exit_value)
     else
         gamma_simu = rand(Normal(param[3],param[4]),1)
         mu_simu = rand(Normal(param[1],param[2]), today_n)
         entry_value = gamma_eq[today_n, state_idx]
-        exit_value = mu_eq[today_n, state_idx] .* ones(today_n)
-        tmr_n = today_n - sum(mu_simu .> exit_value) + sum(gamma_simu .> entry_value) 
-        entry_decision = sum(gamma_simu .> entry_value)
+        exit_value = mu_eq[today_n-1, state_idx] .* ones(today_n)
+        tmr_n = today_n - sum(mu_simu .> exit_value) + sum(gamma_simu .< entry_value) 
+        entry_decision = sum(gamma_simu .< entry_value)
         exit_decision = (mu_simu .> exit_value)
     end
-    
+
     return tmr_n, entry_decision, exit_decision
 end
 
 
-transition
-weight_x1 = aweights(transition[1,:])
-weight_x2 = aweights(transition[2,:])
-weight_x3 = aweights(transition[3,:])
 
-x1_path = sample(MersenneTwister(123),[1,2,3], weight_x1, 10000; replace = true, ordered = false)
-x2_path = sample(MersenneTwister(221),[1,2,3], weight_x2, 10000; replace = true, ordered = false)
-x3_path = sample(MersenneTwister(521),[1,2,3], weight_x3, 10000; replace = true, ordered = false)
+function firm_num_simu_withtax(today_n, state_idx, mu_eq, gamma_eq)
+    if today_n > 5
+        today_n = 5
+    end
+    
+    if today_n == 0
+        gamma_simu = rand(Normal(param[3], param[4]),1)
+        tmr_n = today_n + 1   
+        entry_decision = 1
+        exit_decision = 0
+    elseif today_n == 5
+        mu_simu = rand(Normal(param[1], param[2]), today_n)
+        exit_value = ones(today_n, 1).* (mu_eq[today_n-1, state_idx])
+        tmr_n = today_n - sum(mu_simu .> exit_value)
+        entry_decision = 0
+        exit_decision = (mu_simu .> exit_value)
+    elseif today_n == 1
+        gamma_simu = rand(Normal(param[3],param[4]),1)
+        mu_simu = rand(Normal(param[1],param[2]), today_n)
+        entry_value = gamma_eq[2, state_idx]
+        exit_value = mu_eq[1, state_idx]
+        tmr_n = today_n - sum(mu_simu .> exit_value) + sum(gamma_simu .+15.0 .< entry_value ) 
+        entry_decision = sum(gamma_simu .+15.0 .< entry_value )
+        exit_decision = (mu_simu .> exit_value)
+    else
+        gamma_simu = rand(Normal(param[3],param[4]),1)
+        mu_simu = rand(Normal(param[1],param[2]), today_n)
+        entry_value = gamma_eq[today_n, state_idx]
+        exit_value = mu_eq[today_n-1, state_idx] .* ones(today_n)
+        tmr_n = today_n - sum(mu_simu .> exit_value) + sum(gamma_simu .+15.0 .< entry_value  ) 
+        entry_decision = sum(gamma_simu .+ 15.0 .< entry_value )
+        exit_decision = (mu_simu .> exit_value)
+    end
 
-nprime_x1, entry_x1, exit_x1 = firm_num_simu(0, 1, mu_1, gamma_1)
-nprime_x2, entry_x2, exit_x2 = firm_num_simu(0, 2, mu_1, gamma_1)
-nprime_x3, entry_x3, exit_x3 = firm_num_simu(0, 3, mu_1, gamma_1)
-
-iter = 1
-
-
-nlist = Vector{Int64}(undef,1)
-entry_decision = Vector{Int64}(undef,1)
-exit_decision = Vector{Any}(undef,1)
-
-while iter < 10000
-
-    nprime_x11, entry_x11, exit_x11 = firm_num_simu(nprime_x1, x1_path[iter], mu_1, gamma_1)
-    nprime_x22, entry_x22, exit_x22 = firm_num_simu(nprime_x1, x2_path[iter], mu_1, gamma_1)
-    nprime_x33, entry_x33, exit_x33 = firm_num_simu(nprime_x1, x3_path[iter], mu_1, gamma_1)
-
-    nprime_x1 = nprime_x11
-    nprime_x2 = nprime_x22
-    nprime_x3 = nprime_x33
-
-
-
-    push!(nlist, nprime_x1, nprime_x2, nprime_x3)
-    push!(entry_decision, entry_x11, entry_x22, entry_x33)
-    push!(exit_decision, exit_x11, exit_x22, exit_x33)
-
-    iter += 1
-    @show (iter)
+    return tmr_n, entry_decision, exit_decision
 end
+
+
+
+function simulation(transition, simu_number)
+
+    weight_x1 = aweights(transition[1,:])
+    weight_x2 = aweights(transition[2,:])
+    weight_x3 = aweights(transition[3,:])
+    iter = 1
+
+    nlist_1 = zeros(eltype(Int64),1)
+    nlist_1_tax = zeros(eltype(Int64),1)
+    entry_decision_1 = zeros(eltype(Int64),1)
+    exit_decision_1 = zeros(eltype(Int64),1)
+    x_path = zeros(eltype(Int64),1)
+    xstate = 1
+    nprime_x1 = 0
+    nprime_x1_tax = 0
+    entry_x11 = 0
+    exit_x11 = 0
+    while iter < simu_number
+    
+        push!(nlist_1, nprime_x1)
+        nprime_x11, entry_x11, exit_x11 = firm_num_simu(nprime_x1, xstate, mu_1, gamma_1)
+        push!(entry_decision_1, entry_x11)
+        push!(exit_decision_1, sum(exit_x11))
+        nprime_x1 = nprime_x11
+
+
+
+        push!(nlist_1_tax, nprime_x1_tax)
+        nprime_x11_tax, none1, none2 = firm_num_simu_withtax(nprime_x1_tax, xstate, mu_1, gamma_1)
+        nprime_x1_tax = nprime_x11_tax
+
+        push!(x_path, xstate)
+
+
+        if xstate == 1
+            xstate = sample([1,2,3], weight_x1, 1)[]
+        elseif xstate == 2
+            xstate = sample([1,2,3], weight_x2, 1)[]
+        elseif xstate == 3
+            xstate = sample([1,2,3], weight_x3, 1)[]
+        end
+        iter += 1
+    end
+    return nlist_1[2:end], nlist_1_tax[2:end], x_path[2:end], entry_decision_1[2:end], exit_decision_1[2:end]
+end
+
+simu_iter = 0
+nt_fnum = zeros(0)
+t_fnum = zeros(0)
+
+while simu_iter < 100
+    notax_fnum, tax_fnum, X, Entry, Exit = simulation(transition, 100001)
+    mean_fnum = mean(notax_fnum)
+    tax_mean_fnum = mean(tax_fnum)
+    push!(nt_fnum, mean_fnum)
+    push!(t_fnum, tax_mean_fnum)
+    simu_iter += 1
+end
+
+nt_fnum
+t_fnum
+
+brange = range(2.2, 2.7, length=100)
+histogram(Any[nt_fnum, t_fnum], bins =brange, label=["Without Tax" "With Tax"])
+title!("Average Firm Number")
+xlabel!("Firm Number")
+ylabel!("Frequency")
+savefig("Tax_notax.png")
+
+
+firm_number, none, x_simulate_state, entry, exit = simulation(transition, 1000001)
+data = DataFrame(N= firm_number, X= x_simulate_state, Entry = entry, Exit= exit)
+
+CSV.write("simulated_data.csv", data)
+
+
+
+
+
+
 
