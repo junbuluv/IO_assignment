@@ -41,87 +41,62 @@ e_53 = count(i -> (i == 1), df_53.Entry)/ size(df_53,1)
 ehat = [e_11 e_12 e_13 ; e_21 e_22 e_23 ; e_31 e_32 e_33; e_41 e_42 e_43; e_51 e_52 e_53]
 
 
-mean(count(i -> (i == 0), df_11.Exit)/ size(df_11,1) + count(i -> (i == 1), df_11.Exit)/ size(df_11,1))
-
-count(i -> (i == 0), df_12.Exit)/ size(df_12,1)
-count(i -> (i == 1), df_12.Exit)/ size(df_12,1)
-
-count(i -> (i == 0), df_13.Exit)/ size(df_13,1)
-count(i -> (i == 1), df_13.Exit)/ size(df_13,1)
-
-count(i -> (i == 0), df_21.Exit)/ size(df_21,1)
-count(i -> (i == 1), df_21.Exit)/ size(df_21,1)
-count(i -> (i == 2), df_21.Exit)/ size(df_21,1)
-
-count(i -> (i == 0), df_22.Exit)/ size(df_22,1)
-count(i -> (i == 1), df_22.Exit)/ size(df_22,1)
-count(i -> (i == 2), df_22.Exit)/ size(df_22,1)
 
 
-count(i -> (i == 0), df_23.Exit)/ size(df_23,1)
-count(i -> (i == 1), df_23.Exit)/ size(df_23,1)
-count(i -> (i == 2), df_23.Exit)/ size(df_23,1)
+d_11 = count(i -> (i == 0), df_11.Exit)/ size(df_11,1)
+d_12 = count(i -> (i == 0), df_12.Exit)/ size(df_12,1) # Staying
+d_13 = count(i -> (i == 0), df_13.Exit)/ size(df_13,1)
 
-count(i -> (i == 0), df_31.Exit)/ size(df_31,1)
-count(i -> (i == 1), df_31.Exit)/ size(df_31,1)
-count(i -> (i == 2), df_31.Exit)/ size(df_31,1)
-count(i -> (i == 3), df_31.Exit)/ size(df_31,1)
 
-count(i -> (i == 0), df_32.Exit)/ size(df_32,1)
-count(i -> (i == 1), df_32.Exit)/ size(df_32,1)
-count(i -> (i == 2), df_32.Exit)/ size(df_32,1)
-count(i -> (i == 3), df_32.Exit)/ size(df_32,1)
+d_21 = (binomial(2,2) * (count(i -> (i == 0), df_21.Exit)/ size(df_21,1))^2  + binomial(2,1) * count(i -> (i == 1), df_21.Exit)/ size(df_21,1) * (1 - count(i -> (i == 1), df_21.Exit)/ size(df_21,1)) + binomial(2,0) *  (1 - count(i -> (i == 2), df_21.Exit)/ size(df_21,1))^2 ) / 2
+d_22 = (binomial(2,2) * (count(i -> (i == 0), df_22.Exit)/ size(df_22,1))^2  + binomial(2,1) * count(i -> (i == 1), df_22.Exit)/ size(df_22,1) * (1 - count(i -> (i == 1), df_22.Exit)/ size(df_22,1)) + binomial(2,0) *  (1 - count(i -> (i == 2), df_22.Exit)/ size(df_22,1))^2  ) / 2
+d_23 = (binomial(2,2) * (count(i -> (i == 0), df_23.Exit)/ size(df_23,1))^2  + binomial(2,1) * count(i -> (i == 1), df_23.Exit)/ size(df_23,1) * (1 - count(i -> (i == 1), df_23.Exit)/ size(df_23,1)) + binomial(2,0) *  (1- count(i -> (i == 2), df_23.Exit)/ size(df_23,1))^2 ) / 2
 
-count(i -> (i == 0), df_33.Exit)/ size(df_33,1)
-count(i -> (i == 1), df_33.Exit)/ size(df_33,1)
-count(i -> (i == 2), df_33.Exit)/ size(df_33,1)
-count(i -> (i == 3), df_33.Exit)/ size(df_33,1)
+d_31 = (binomial(3,3) * (count(i -> (i == 0), df_31.Exit)/ size(df_31,1))^3  + binomial(3,1) * count(i -> (i == 1), df_31.Exit)/ size(df_31,1) * (1 - count(i -> (i == 1), df_31.Exit)/ size(df_31,1))^2 + binomial(3,2) *  (count(i -> (i == 2), df_31.Exit)/ size(df_31,1))^2  * (1- (count(i -> (i == 2), df_31.Exit)/ size(df_31,1))) + binomial(3,3) *  (1 - count(i -> (i == 3), df_31.Exit)/ size(df_31,1))^3 ) / 3
+d_32 = (binomial(3,3) * (count(i -> (i == 0), df_32.Exit)/ size(df_32,1))^3  + binomial(3,1) * count(i -> (i == 1), df_32.Exit)/ size(df_32,1) * (1 - count(i -> (i == 1), df_32.Exit)/ size(df_32,1))^2 + binomial(3,2) *  (count(i -> (i == 2), df_32.Exit)/ size(df_32,1))^2  * (1- (count(i -> (i == 2), df_32.Exit)/ size(df_32,1))) + binomial(3,3) *  (1 - count(i -> (i == 3), df_32.Exit)/ size(df_32,1))^3 ) / 3
+d_33 = (binomial(3,3) * (count(i -> (i == 0), df_33.Exit)/ size(df_33,1))^3  + binomial(3,1) * count(i -> (i == 1), df_33.Exit)/ size(df_33,1) * (1 - count(i -> (i == 1), df_33.Exit)/ size(df_33,1))^2 + binomial(3,2) *  (count(i -> (i == 2), df_33.Exit)/ size(df_33,1))^2  * (1- (count(i -> (i == 2), df_33.Exit)/ size(df_33,1))) + binomial(3,3) *  (1 - count(i -> (i == 3), df_32.Exit)/ size(df_32,1))^3 ) / 3
+
+
+d_41 = (binomial(4,4) * (count(i -> (i == 0), df_41.Exit)/ size(df_41,1))^4  + binomial(4,1) * count(i -> (i == 1), df_41.Exit)/ size(df_41,1) * (1 - count(i -> (i == 1), df_41.Exit)/ size(df_41,1))^3 + binomial(4,2) *  (count(i -> (i == 2), df_41.Exit)/ size(df_41,1))^2  * (1- (count(i -> (i == 2), df_41.Exit)/ size(df_41,1)))^2 + binomial(4,3) *  (count(i -> (i == 3), df_41.Exit)/ size(df_41,1))^3 * (1 - count(i -> (i == 3), df_41.Exit)/ size(df_41,1)) + binomial(4,4) * (1 - count(i -> (i == 4), df_41.Exit)/ size(df_41,1))^4 ) /4
+d_42 = (binomial(4,4) * (count(i -> (i == 0), df_42.Exit)/ size(df_42,1))^4  + binomial(4,1) * count(i -> (i == 1), df_42.Exit)/ size(df_42,1) * (1 - count(i -> (i == 1), df_42.Exit)/ size(df_42,1))^3 + binomial(4,2) *  (count(i -> (i == 2), df_42.Exit)/ size(df_42,1))^2  * (1- (count(i -> (i == 2), df_42.Exit)/ size(df_42,1)))^2 + binomial(4,3) *  (count(i -> (i == 3), df_42.Exit)/ size(df_42,1))^3 * (1 - count(i -> (i == 3), df_42.Exit)/ size(df_42,1)) + binomial(4,4) * (1 - count(i -> (i == 4), df_42.Exit)/ size(df_42,1))^4 ) /4
+d_43 = (binomial(4,4) * (count(i -> (i == 0), df_43.Exit)/ size(df_43,1))^4  + binomial(4,1) * count(i -> (i == 1), df_43.Exit)/ size(df_43,1) * (1 - count(i -> (i == 1), df_43.Exit)/ size(df_43,1))^3 + binomial(4,2) *  (count(i -> (i == 2), df_43.Exit)/ size(df_43,1))^2  * (1- (count(i -> (i == 2), df_43.Exit)/ size(df_43,1)))^2 + binomial(4,3) *  (count(i -> (i == 3), df_43.Exit)/ size(df_43,1))^3 * (1 - count(i -> (i == 3), df_42.Exit)/ size(df_42,1)) + binomial(4,4) * (1 - count(i -> (i == 4), df_42.Exit)/ size(df_42,1))^4 ) /4
+
+d_51 = (binomial(5,5) * (count(i -> (i == 0), df_51.Exit)/ size(df_51,1))^5  + binomial(5,1) * count(i -> (i == 1), df_51.Exit)/ size(df_51,1) * (1 - count(i -> (i == 1), df_51.Exit)/ size(df_51,1))^4 + binomial(5,2) *  (count(i -> (i == 2), df_51.Exit)/ size(df_51,1))^2  * (1- (count(i -> (i == 2), df_51.Exit)/ size(df_51,1)))^3 + binomial(5,3) *  (count(i -> (i == 3), df_51.Exit)/ size(df_51,1))^3 * (1 - count(i -> (i == 3), df_51.Exit)/ size(df_51,1))^2 + binomial(5,4) * (count(i -> (i == 4), df_51.Exit)/ size(df_51,1))^4 * (1 - count(i -> (i == 4), df_51.Exit)/ size(df_51,1)) + binomial(5,5) * (1 - count(i -> (i == 5), df_51.Exit)/ size(df_51,1))^5) /5
+d_52 = (binomial(5,5) * (count(i -> (i == 0), df_52.Exit)/ size(df_52,1))^5  + binomial(5,1) * count(i -> (i == 1), df_52.Exit)/ size(df_52,1) * (1 - count(i -> (i == 1), df_52.Exit)/ size(df_52,1))^4 + binomial(5,2) *  (count(i -> (i == 2), df_52.Exit)/ size(df_52,1))^2  * (1- (count(i -> (i == 2), df_52.Exit)/ size(df_52,1)))^3 + binomial(5,3) *  (count(i -> (i == 3), df_52.Exit)/ size(df_52,1))^3 * (1 - count(i -> (i == 3), df_52.Exit)/ size(df_52,1))^2 + binomial(5,4) * (count(i -> (i == 4), df_52.Exit)/ size(df_52,1))^4 * (1 - count(i -> (i == 4), df_52.Exit)/ size(df_52,1)) + binomial(5,5) * (1 - count(i -> (i == 5), df_52.Exit)/ size(df_52,1))^5) /5
+d_53 = (binomial(5,5) * (count(i -> (i == 0), df_53.Exit)/ size(df_53,1))^5  + binomial(5,1) * count(i -> (i == 1), df_53.Exit)/ size(df_53,1) * (1 - count(i -> (i == 1), df_53.Exit)/ size(df_53,1))^4 + binomial(5,2) *  (count(i -> (i == 2), df_53.Exit)/ size(df_53,1))^2  * (1- (count(i -> (i == 2), df_53.Exit)/ size(df_53,1)))^3 + binomial(5,3) *  (count(i -> (i == 3), df_53.Exit)/ size(df_53,1))^3 * (1 - count(i -> (i == 3), df_53.Exit)/ size(df_53,1))^2 + binomial(5,4) * (count(i -> (i == 4), df_53.Exit)/ size(df_53,1))^4 * (1 - count(i -> (i == 4), df_53.Exit)/ size(df_53,1)) + binomial(5,5) * (1 - count(i -> (i == 5), df_53.Exit)/ size(df_53,1))^5) /5
+
+
+dhat = [d_11 d_12 d_13 ; d_21 d_22 d_23 ; d_31 d_32 d_33; d_41 d_42 d_43; d_51 d_52 d_53]
+
+ehat
+dhat
 
 
 
-count(i -> (i == 0), df_41.Exit)/ size(df_41,1)
-count(i -> (i == 1), df_41.Exit)/ size(df_41,1)
-count(i -> (i == 2), df_41.Exit)/ size(df_41,1)
-count(i -> (i == 3), df_41.Exit)/ size(df_41,1)
-count(i -> (i == 4), df_41.Exit)/ size(df_41,1)
 
 
-count(i -> (i == 0), df_42.Exit)/ size(df_42,1)
-count(i -> (i == 1), df_42.Exit)/ size(df_42,1)
-count(i -> (i == 2), df_42.Exit)/ size(df_42,1)
-count(i -> (i == 3), df_42.Exit)/ size(df_42,1)
-count(i -> (i == 4), df_42.Exit)/ size(df_42,1)
+time = ones(1)
+x_path = ones(eltype(Int64),1)
+staying = zeros(0)
+iter = 1
+xstate = x_path[1]
+while iter < 100000
+weight_x1 = aweights(transition[1,:])
+weight_x2 = aweights(transition[2,:])
+weight_x3 = aweights(transition[3,:])
 
+if xstate == 1
+    xstate = sample([1,2,3], weight_x1, 1)[]
+elseif xstate == 2
+    xstate = sample([1,2,3], weight_x2, 1)[]
+elseif xstate == 3
+    xstate = sample([1,2,3], weight_x3, 1)[]
+end
+push!(x_path, xstate)
+iter += 1
+end
+x_path
 
-count(i -> (i == 0), df_43.Exit)/ size(df_43,1)
-count(i -> (i == 1), df_43.Exit)/ size(df_43,1)
-count(i -> (i == 2), df_43.Exit)/ size(df_43,1)
-count(i -> (i == 3), df_43.Exit)/ size(df_43,1)
-count(i -> (i == 4), df_43.Exit)/ size(df_43,1)
-
-
-
-count(i -> (i == 0), df_51.Exit)/ size(df_51,1)
-count(i -> (i == 1), df_51.Exit)/ size(df_51,1)
-count(i -> (i == 2), df_51.Exit)/ size(df_51,1)
-count(i -> (i == 3), df_51.Exit)/ size(df_51,1)
-count(i -> (i == 4), df_51.Exit)/ size(df_51,1)
-count(i -> (i == 5), df_51.Exit)/ size(df_51,1)
-
-count(i -> (i == 0), df_52.Exit)/ size(df_52,1)
-count(i -> (i == 1), df_52.Exit)/ size(df_52,1)
-count(i -> (i == 2), df_52.Exit)/ size(df_52,1)
-count(i -> (i == 3), df_52.Exit)/ size(df_52,1)
-count(i -> (i == 4), df_52.Exit)/ size(df_52,1)
-count(i -> (i == 5), df_52.Exit)/ size(df_52,1)
-
-
-count(i -> (i == 0), df_53.Exit)/ size(df_53,1) 
-count(i -> (i == 1), df_53.Exit)/ size(df_53,1)
-count(i -> (i == 2), df_53.Exit)/ size(df_53,1)
-count(i -> (i == 3), df_53.Exit)/ size(df_53,1)
-count(i -> (i == 4), df_53.Exit)/ size(df_53,1)
-count(i -> (i == 5), df_53.Exit)/ size(df_53,1)
 
 
 
