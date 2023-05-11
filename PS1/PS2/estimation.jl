@@ -72,164 +72,266 @@ ehat
 dhat
 
 
+function forward_simulation_incumbent(x, firmnum, param, transition)
 
-
-
-time = ones(1)
-x_path = ones(eltype(Int64),1)
-staying = zeros(0)
-iter = 1
-xstate = x_path[1]
-while iter < 100000
-weight_x1 = aweights(transition[1,:])
-weight_x2 = aweights(transition[2,:])
-weight_x3 = aweights(transition[3,:])
-
-if xstate == 1
-    xstate = sample([1,2,3], weight_x1, 1)[]
-elseif xstate == 2
-    xstate = sample([1,2,3], weight_x2, 1)[]
-elseif xstate == 3
-    xstate = sample([1,2,3], weight_x3, 1)[]
-end
-push!(x_path, xstate)
-iter += 1
-end
-x_path
-
-
-
-
-
-
-
-def forward_simulate_incumbent(beta, cournot_pi_matrix, entry_TH, exit_TH, theta_distribution, s, N_init, x_idx_init):
-# forward simulate incumbent's life cycle conditional on today's remaining decision
-# function name: forward_simulate_incumbent
-# function input: N_init, x_idx_init
-# function output: PDV
-# N_init: 1,2,3,4,5
-# x_dix_init: 0,1,2
-    gamma_loc, gamma_scale, mu_loc, mu_scale = theta_distribution
-    t=0
-    time_idx = [0]
-    # Start with N_init
-    N_history = [N_init]
-    # Start with x_idx_init
-    x_idx_history = [x_idx_init]
-    # Remaining decision has not been made
-    i_remain_history = []
-
-    np.random.seed(s)
-    # t=0 simulate
-    
-    #(1) x is updated exogenously 
-    x_idx_pre = x_simulator(x_idx_init, s)
-    
-    # N_pre will be the initial value for the while loop for (t>=1)
-    if N_init == 1:
-        # When the incumbent is the single firm in the market
-        # Potential entrant is the only factor that affects N'
-        ## My decision is fixed as remain
-        i_remain_decision = 1
-        gamma_draw = np.random.normal(gamma_loc, gamma_scale, 1)[0]
-        entry_TH_value = entry_TH[N_init][x_idx_init]
-        ## Entrants decision is made
-        entry_decision = int(gamma_draw < entry_TH_value)
-        ## N is updated
-        N_pre = N_init + entry_decision
-    
-    elif N_init == 5:
-        # When there are five firms in the market, the potential entrant can not enter
-        ## My decision is fixed as remain
-        i_remain_decision = 1
-        ## Other incumbents decisions
-        mu_draw_array = np.random.normal(mu_loc, mu_scale, N_init-1)
-        exit_TH_value_array = np.full(N_init-1, exit_TH[N_init-1][x_idx_init])
-        ## N is updated
-        N_pre = N_init - (mu_draw_array > exit_TH_value_array).sum()
+    weight_x1 = aweights(transition[1,:])
+    weight_x2 = aweights(transition[2,:])
+    weight_x3 = aweights(transition[3,:])
+    x_path = ones(eltype(Int64),1) * x
+    nlist = ones(eltype(Int64),1) * firmnum
+    staying_hist = Vector{Int64}(undef,1)
+    t = 0 
+    time_idx = zeros(eltype(Int64),1)
+    scrap = zeros(eltype(Float64),0)
+    while t < 10000
         
-    else:
-        # When there are 2,3,4 firms in the market
-        ## My decision is fixed as remain
-        i_remain_decision = 1
-        ## Other incumbents decisions
-        mu_draw_array = np.random.normal(mu_loc, mu_scale, N_init-1)
-        exit_TH_value_array = np.full(N_init-1, exit_TH[N_init-1][x_idx_init])
-        gamma_draw = np.random.normal(gamma_loc, gamma_scale, 1)[0]
-        entry_TH_value = entry_TH[N_init][x_idx_init]
-        ## Entrants decision is made
-        entry_decision = int(gamma_draw < entry_TH_value)
-        ## N is updated
-        N_pre = N_init - (mu_draw_array > exit_TH_value_array).sum() + entry_decision
-        
-
-    N_history.append(N_pre)                     # at this point len(N_history) == 2 
-    x_idx_history.append(x_idx_pre)             # at this point len(x_idx_history) == 2 
-    i_remain_history.append(i_remain_decision)  # at this point len(i_remain_history) == 1
-
-
-    while(t < 1000):
         t += 1
-        time_idx.append(t)
-        N_current = N_history[-1]
-        x_idx_current = x_idx_history[-1]
-        
-        np.random.seed(s*1000+t)
-        #(1) decide i's exit decision
-        i_mu_draw = np.random.normal(mu_loc, mu_scale, 1)[0]
-        exit_TH_value = exit_TH[N_current-1][x_idx_current]
-        i_remain_decision = int(i_mu_draw < exit_TH_value)
-        
-        # break condition conditional on i's exit decision
-        if i_remain_decision == 0: # i exit
-            i_remain_history.append(i_remain_decision)
-            scrap_value = i_mu_draw
+        append!(time_idx, t)
+        today_n = nlist[end]
+        x_today = x_path[end]
+        mu_draw_i = rand(Normal(param[1], param[2]), 1)
+        exit_value = mu_1[today_n, x_today]
+        remain_decision_i = sum(mu_draw_i .< exit_value)
+
+        if remain_decision_i == 0
+            append!(staying_hist, remain_decision_i)
+            append!(scrap, exit_value)
             break
+        else
+            if x_today == 1
+                x_tmr = sample([1,2,3], weight_x1, 1)[]
+            elseif x_today == 2
+                x_tmr = sample([1,2,3], weight_x2, 1)[]
+            elseif x_today == 3
+                x_tmr = sample([1,2,3], weight_x3, 1)[]
+            end
+    
+    
 
-        #(2) continue forward simulating
-        #note that i decided to remain in the market at this point
-        #(2-1) update the state variables
-        x_idx_tmr = x_simulator(x_idx_current, s*1000+t)
-
-        if N_current == 1:
-            # i is the single incumbent in this market
-            # so only the entrant will change the number of firms in the market
-            gamma_draw = np.random.normal(gamma_loc, gamma_scale, 1)[0]
-            entry_TH_value = entry_TH[N_current][x_idx_current]
-            entry_decision = int(gamma_draw < entry_TH_value)
-            N_tmr = N_current + entry_decision
-            
+            if today_n == 1
         
-        elif N_current == 5:
-            # since there are 5 incumbents in the market, entrant can not enter the market tmr
-            # hence, only the incumbents can change the number of firms in the market
-            mu_draw_array = np.random.normal(mu_loc, mu_scale, N_current-1)
-            exit_TH_value_array = np.full(N_current-1, exit_TH[N_current-1][x_idx_current])
-            N_tmr = N_current - (mu_draw_array > exit_TH_value_array).sum()
-            
+                entrant_draw = rand(Normal(param[3], param[4]), 1)
+                entry_value = gamma_1[today_n+1, x_tmr]
+                entry_decision = sum(entrant_draw .< entry_value)
+                tmr_n = today_n + entry_decision
 
-        else:    
-            mu_draw_array = np.random.normal(mu_loc, mu_scale, N_current-1)
-            exit_TH_value_array = np.full(N_current-1, exit_TH[N_current-1][x_idx_current])
-            gamma_draw = np.random.normal(gamma_loc, gamma_scale, 1)[0]
-            entry_TH_value = entry_TH[N_current][x_idx_current]
-            entry_decision = int(gamma_draw < entry_TH_value)
-            N_tmr = N_current - (mu_draw_array > exit_TH_value_array).sum() + entry_decision
-            
-        #(2-2) record the decision and transition
-        i_remain_history.append(i_remain_decision)
-        N_history.append(N_tmr)
-        x_idx_history.append(x_idx_tmr)
 
-    df_incumbent_simulation = df({"t": time_idx, "N": N_history, "x_idx": x_idx_history, "remain_decision": i_remain_history})
-    def incumbent_PDV(t, N, x_idx, remain_decision, scrap_value):
-        if remain_decision == 0:
-            pdv = (beta**t)*scrap_value
-        else:
-            pdv = (beta**t)*cournot_pi_matrix[N-1][x_idx]
-        return pdv
-    vec_incumbent_PDV = np.vectorize(incumbent_PDV)
-    PDV = vec_incumbent_PDV(df_incumbent_simulation['t'].values, df_incumbent_simulation['N'].values, df_incumbent_simulation['x_idx'].values, df_incumbent_simulation['remain_decision'].values, scrap_value).sum()
+            elseif today_n == 5
 
-    return PDV
+                exit_draw = rand(Normal(param[1], param[2]), today_n - 1)
+                exit_value = ones(today_n - 1) .* mu_1[today_n - 1 ,x_tmr]
+                tmr_n = today_n - sum(exit_draw .> exit_value)
+            else
+
+                exit_draw = rand(Normal(param[1], param[2]), today_n - 1)
+                exit_value = ones(today_n - 1) .* mu_1[today_n - 1, x_tmr]
+                entrant_draw = rand(Normal(param[3], param[4]), 1)
+                entry_value = gamma_1[today_n+1, x_tmr]
+                entry_decision = sum(entrant_draw .< entry_value)
+                tmr_n = today_n - sum(entrant_draw .> entry_value) + entry_decision
+        
+            end
+            exit_value = 0
+            append!(staying_hist,remain_decision_i)
+            append!(scrap, exit_value)
+            append!(nlist, tmr_n)
+            append!(x_path, x_tmr)
+        end
+
+    end
+    res = 0.0
+    for i in eachindex(x_path)
+    if staying_hist[2:end][i] == 1
+        res += 0.9^time_idx[2:end][i] * profit(x_path[i], nlist[i])
+    elseif staying_hist[2:end][i] == 0
+        res += 0.9^time_idx[2:end][i] * scrap[i]
+    end
+    end
+
+    return res
+end
+
+param = [5, sqrt(5), 5, sqrt(5)]
+simu = 0.0
+S = [10, 15, 20, 25, 30, 40, 50, 100, 200, 300, 400, 500, 600, 700, 800, 900, 1000, 2000, 3000, 4000, 5000]
+pdvlist= zeros(0)
+pdv = 0.0
+iter = 0
+
+for j in eachindex(S)
+    while iter < S[j]
+        simu += forward_simulation_incumbent(1, 1, param, transition)
+        iter += 1
+    end
+    pdv = simu/ S[j]
+    append!(pdvlist, pdv)
+end
+
+pdvlist
+plot(S, pdvlist)
+xlabel!("Simulation Number")
+ylabel!("PDV_incumbent")
+savefig("PDV_incumbent.png")
+
+
+function forward_simulation_entrant(x, firmnum, param, transition)
+
+    weight_x1 = aweights(transition[1,:])
+    weight_x2 = aweights(transition[2,:])
+    weight_x3 = aweights(transition[3,:])
+    x_path = ones(eltype(Int64),1) * x
+    nlist = ones(eltype(Int64),1) * firmnum
+    staying_hist = Vector{Int64}(undef,1)
+    scrap = zeros(eltype(Float64),0)
+
+    t = 0 
+    time_idx = zeros(eltype(Int64),1)
+    entry_value = zeros(eltype(Float64),0)
+    while t < 10000
+        
+        t += 1
+        append!(time_idx, t)
+        today_n = nlist[end]
+        x_today = x_path[end]
+        mu_draw_i = rand(Normal(param[1], param[2]), 1)
+        exit_value = mu_1[today_n, x_today]
+        remain_decision_i = sum(mu_draw_i .< exit_value)
+
+        if remain_decision_i == 0
+            append!(staying_hist, remain_decision_i)
+            append!(scrap, exit_value)
+            break
+        else
+    
+
+            if today_n == 1
+        
+                entrant_draw = rand(Normal(param[3], param[4]), 1)
+                entry_value = gamma_1[today_n+1, x_today]
+                entry_decision = sum(entrant_draw .< entry_value)
+                tmr_n = today_n + entry_decision
+                if x_today == 1
+                    x_tmr = sample([1,2,3], weight_x1, 1)[]
+                elseif x_today == 2
+                    x_tmr = sample([1,2,3], weight_x2, 1)[]
+                elseif x_today == 3
+                    x_tmr = sample([1,2,3], weight_x3, 1)[]
+                end
+
+            elseif today_n == 5
+
+                exit_draw = rand(Normal(param[1], param[2]), today_n)
+                exit_value = ones(today_n) .* mu_1[today_n ,x_today]
+                tmr_n = today_n - sum(exit_draw .> exit_value)
+                if x_today == 1
+                    x_tmr = sample([1,2,3], weight_x1, 1)[]
+                elseif x_today == 2
+                    x_tmr = sample([1,2,3], weight_x2, 1)[]
+                elseif x_today == 3
+                    x_tmr = sample([1,2,3], weight_x3, 1)[]
+                end
+            else
+
+                exit_draw = rand(Normal(param[1], param[2]), today_n)
+                exit_value = ones(today_n) .* mu_1[today_n, x_today]
+                entrant_draw = rand(Normal(param[3], param[4]), 1)
+                entry_value = gamma_1[today_n+1, x_today]
+                entry_decision = sum(entrant_draw .< entry_value)
+                tmr_n = today_n - sum(entrant_draw .> entry_value) + entry_decision
+                if x_today == 1
+                    x_tmr = sample([1,2,3], weight_x1, 1)[]
+                elseif x_today == 2
+                    x_tmr = sample([1,2,3], weight_x2, 1)[]
+                elseif x_today == 3
+                    x_tmr = sample([1,2,3], weight_x3, 1)[]
+                end
+            end
+            exit_value = 0
+            append!(staying_hist,remain_decision_i)
+            append!(scrap, exit_value)
+            append!(nlist, tmr_n)
+            append!(x_path, x_tmr)
+        end
+
+    end
+    res = 0.0
+    for i in eachindex(x_path)
+        if staying_hist[2:end][i] == 1
+            res += 0.9^time_idx[2:end][i] * profit(x_path[i], nlist[i])
+        elseif staying_hist[2:end][i] == 0
+            res += 0.9^time_idx[2:end][i] * scrap[i]
+    end
+    end
+
+    return res
+end
+
+
+
+simu = 0.0
+S = [10, 15, 20, 25, 30, 40, 50, 100, 200, 300, 400, 500, 600, 700, 800, 900, 1000, 2000, 3000, 4000, 5000]
+pdvlist= zeros(0)
+pdv = 0.0
+iter = 0
+
+for j in eachindex(S)
+    while iter < S[j]
+        simu += forward_simulation_entrant(1, 1, param, transition)
+        iter += 1
+    end
+    pdv = simu/ (2* S[j])
+    append!(pdvlist, pdv)
+end
+
+pdvlist
+plot(S, pdvlist)
+xlabel!("Simulation Number")
+ylabel!("PDV_entrant")
+savefig("PDV_entrant.png")
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+def Q_n_first_method(theta_distribution, sim_num):
+    gamma_loc, gamma_scale, mu_loc, mu_scale = theta_distribution
+    entry_TH = norm.ppf(estimated_entry_prob_matrix, loc=gamma_loc, scale=gamma_scale)
+    exit_TH = norm.ppf(estimated_remain_prob_matrix, loc=mu_loc, scale=mu_scale)
+
+    # (1) generate incumbent lambda matrix
+    Lambda_matrix_incumbent = np.ones((5,3))
+    for N in [1,2,3,4,5]:
+        for x_idx in [0,1,2]:
+            simulation_list = [forward_simulate_incumbent.remote(beta, cournot_pi_matrix, entry_TH, exit_TH, theta_distribution, s, N, x_idx) for s in range(sim_num)]
+            simulation_array = np.array(ray.get(simulation_list))
+            Lambda_matrix_incumbent[N-1][x_idx] = simulation_array.mean()
+
+    # (2) generate entrant lambda matrix
+    Lambda_matrix_entrant = np.ones((5,3))
+    for N in [0,1,2,3,4]:
+        for x_idx in [0,1,2]:
+            simulation_list = [forward_simulate_entrant.remote(beta, cournot_pi_matrix, entry_TH, exit_TH, theta_distribution, s, N, x_idx) for s in range(sim_num)]
+            simulation_array = np.array(ray.get(simulation_list))
+            Lambda_matrix_entrant[N][x_idx] = simulation_array.mean()
+
+    incumbent_term = ((norm.cdf((Lambda_matrix_incumbent - mu_loc)/mu_scale) - estimated_remain_prob_matrix)**2).sum()
+    entrant_term = ((norm.cdf((Lambda_matrix_entrant - gamma_loc)/gamma_scale) - estimated_entry_prob_matrix)**2).sum()
+
+    return incumbent_term + entrant_term
+
+
+
+
+
+
+
+

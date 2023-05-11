@@ -119,7 +119,7 @@ end
 function equilibrium(init_mu, init_gamma, init_Vbar, transition, x_state, firm_num, param)
     tol = 1.0
     iter = 1
-    while tol > 1e-14
+    while tol > 1e-13
         tr_d_x1, tr_e_x1 = tr(init_gamma, init_mu, 1, param)
         tr_d_x2, tr_e_x2 = tr(init_gamma, init_mu, 2, param)
         tr_d_x3, tr_e_x3 = tr(init_gamma, init_mu, 3, param)
