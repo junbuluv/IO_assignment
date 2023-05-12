@@ -72,7 +72,7 @@ ehat
 dhat
 
 
-function forward_simulation_incumbent(x, firmnum, param, transition)
+function forward_simulation_incumbent(x, firmnum, transition, entry_thres, exit_thres, parameters)
 
     weight_x1 = aweights(transition[1,:])
     weight_x2 = aweights(transition[2,:])
@@ -89,10 +89,15 @@ function forward_simulation_incumbent(x, firmnum, param, transition)
         append!(time_idx, t)
         today_n = nlist[end]
         x_today = x_path[end]
-        mu_draw_i = rand(Normal(param[1], param[2]), 1)
-        exit_value = mu_1[today_n, x_today]
+       
+        if today_n == 0
+            today_n = 1
+        end
+       
+        mu_draw_i = rand(Normal(parameters[1], parameters[2]), 1)
+        exit_value = exit_thres[today_n, x_today]
         remain_decision_i = sum(mu_draw_i .< exit_value)
-
+       
         if remain_decision_i == 0
             append!(staying_hist, remain_decision_i)
             append!(scrap, exit_value)
@@ -110,23 +115,23 @@ function forward_simulation_incumbent(x, firmnum, param, transition)
 
             if today_n == 1
         
-                entrant_draw = rand(Normal(param[3], param[4]), 1)
-                entry_value = gamma_1[today_n+1, x_tmr]
+                entrant_draw = rand(Normal(parameters[3], parameters[4]), 1)
+                entry_value = entry_thres[today_n+1, x_tmr]
                 entry_decision = sum(entrant_draw .< entry_value)
                 tmr_n = today_n + entry_decision
 
 
             elseif today_n == 5
 
-                exit_draw = rand(Normal(param[1], param[2]), today_n - 1)
-                exit_value = ones(today_n - 1) .* mu_1[today_n - 1 ,x_tmr]
+                exit_draw = rand(Normal(parameters[1], parameters[2]), today_n - 1)
+                exit_value = ones(today_n - 1) .* exit_thres[today_n - 1 ,x_tmr]
                 tmr_n = today_n - sum(exit_draw .> exit_value)
             else
 
-                exit_draw = rand(Normal(param[1], param[2]), today_n - 1)
-                exit_value = ones(today_n - 1) .* mu_1[today_n - 1, x_tmr]
-                entrant_draw = rand(Normal(param[3], param[4]), 1)
-                entry_value = gamma_1[today_n+1, x_tmr]
+                exit_draw = rand(Normal(parameters[1], parameters[2]), today_n - 1)
+                exit_value = ones(today_n - 1) .* exit_thres[today_n - 1, x_tmr]
+                entrant_draw = rand(Normal(parameters[3], parameters[4]), 1)
+                entry_value = entry_thres[today_n+1, x_tmr]
                 entry_decision = sum(entrant_draw .< entry_value)
                 tmr_n = today_n - sum(entrant_draw .> entry_value) + entry_decision
         
@@ -151,36 +156,15 @@ function forward_simulation_incumbent(x, firmnum, param, transition)
     return res
 end
 
-param = [5, sqrt(5), 5, sqrt(5)]
-simu = 0.0
-S = [10, 15, 20, 25, 30, 40, 50, 100, 200, 300, 400, 500, 600, 700, 800, 900, 1000, 2000, 3000, 4000, 5000]
-pdvlist= zeros(0)
-pdv = 0.0
-iter = 0
-
-for j in eachindex(S)
-    while iter < S[j]
-        simu += forward_simulation_incumbent(1, 1, param, transition)
-        iter += 1
-    end
-    pdv = simu/ S[j]
-    append!(pdvlist, pdv)
-end
-
-pdvlist
-plot(S, pdvlist)
-xlabel!("Simulation Number")
-ylabel!("PDV_incumbent")
-savefig("PDV_incumbent.png")
 
 
-function forward_simulation_entrant(x, firmnum, param, transition)
+function forward_simulation_entrant(x, firmnum, transition, entry_thres, exit_thres, parameters)
 
     weight_x1 = aweights(transition[1,:])
     weight_x2 = aweights(transition[2,:])
     weight_x3 = aweights(transition[3,:])
-    x_path = ones(eltype(Int64),1) * x
-    nlist = ones(eltype(Int64),1) * firmnum
+    x_path = ones(eltype(Int64),1) .* x
+    nlist = ones(eltype(Int64),1) .* firmnum
     staying_hist = Vector{Int64}(undef,1)
     scrap = zeros(eltype(Float64),0)
 
@@ -189,14 +173,21 @@ function forward_simulation_entrant(x, firmnum, param, transition)
     entry_value = zeros(eltype(Float64),0)
     while t < 10000
         
+
         t += 1
         append!(time_idx, t)
         today_n = nlist[end]
-        x_today = x_path[end]
-        mu_draw_i = rand(Normal(param[1], param[2]), 1)
-        exit_value = mu_1[today_n, x_today]
-        remain_decision_i = sum(mu_draw_i .< exit_value)
+      
+        if today_n == 0
+            today_n = 1
+        end
 
+        x_today = x_path[end]
+        mu_draw_i = rand(Normal(parameters[1], parameters[2]), 1)
+        exit_value = exit_thres[today_n, x_today]
+        remain_decision_i = sum(mu_draw_i .< exit_value)
+        
+    
         if remain_decision_i == 0
             append!(staying_hist, remain_decision_i)
             append!(scrap, exit_value)
@@ -206,8 +197,8 @@ function forward_simulation_entrant(x, firmnum, param, transition)
 
             if today_n == 1
         
-                entrant_draw = rand(Normal(param[3], param[4]), 1)
-                entry_value = gamma_1[today_n+1, x_today]
+                entrant_draw = rand(Normal(parameters[3], parameters[4]), 1)
+                entry_value = entry_thres[today_n+1, x_today]
                 entry_decision = sum(entrant_draw .< entry_value)
                 tmr_n = today_n + entry_decision
                 if x_today == 1
@@ -220,8 +211,8 @@ function forward_simulation_entrant(x, firmnum, param, transition)
 
             elseif today_n == 5
 
-                exit_draw = rand(Normal(param[1], param[2]), today_n)
-                exit_value = ones(today_n) .* mu_1[today_n ,x_today]
+                exit_draw = rand(Normal(parameters[1], parameters[2]), today_n)
+                exit_value = ones(today_n) .* exit_thres[today_n ,x_today]
                 tmr_n = today_n - sum(exit_draw .> exit_value)
                 if x_today == 1
                     x_tmr = sample([1,2,3], weight_x1, 1)[]
@@ -232,10 +223,10 @@ function forward_simulation_entrant(x, firmnum, param, transition)
                 end
             else
 
-                exit_draw = rand(Normal(param[1], param[2]), today_n)
-                exit_value = ones(today_n) .* mu_1[today_n, x_today]
-                entrant_draw = rand(Normal(param[3], param[4]), 1)
-                entry_value = gamma_1[today_n+1, x_today]
+                exit_draw = rand(Normal(parameters[1], parameters[2]), today_n)
+                exit_value = ones(today_n) .* exit_thres[today_n, x_today]
+                entrant_draw = rand(Normal(parameters[3], parameters[4]), 1)
+                entry_value = entry_thres[today_n+1, x_today]
                 entry_decision = sum(entrant_draw .< entry_value)
                 tmr_n = today_n - sum(entrant_draw .> entry_value) + entry_decision
                 if x_today == 1
@@ -267,70 +258,62 @@ function forward_simulation_entrant(x, firmnum, param, transition)
 end
 
 
-
-simu = 0.0
-S = [10, 15, 20, 25, 30, 40, 50, 100, 200, 300, 400, 500, 600, 700, 800, 900, 1000, 2000, 3000, 4000, 5000]
-pdvlist= zeros(0)
-pdv = 0.0
-iter = 0
-
 for j in eachindex(S)
     while iter < S[j]
-        simu += forward_simulation_entrant(1, 1, param, transition)
+        simu += forward_simulation_entrant(1, 1, transition, gamma_1, mu_1, param)
         iter += 1
     end
-    pdv = simu/ (2* S[j])
+    pdv = simu/( S[j])
     append!(pdvlist, pdv)
 end
 
-pdvlist
-plot(S, pdvlist)
-xlabel!("Simulation Number")
-ylabel!("PDV_entrant")
-savefig("PDV_entrant.png")
+
+function pdv_calc(S, x, fnum, transition, entry_thres, exit_thres, parameters)
+    pdv = 0.0
+    iter = 0
+    simu_entr = 0.0
+    simu_incumbent = 0.0
+    iter
+    while iter < S
+        simu_entr = simu_entr + forward_simulation_entrant(x, fnum, transition, entry_thres, exit_thres, parameters)
+        simu_incumbent = simu_incumbent +  forward_simulation_incumbent(x, fnum, transition, entry_thres, exit_thres, parameters)
+        iter += 1
+    end
+    
+    
+    pdv = [simu_entr/ S, simu_incumbent / S]
+        
+    return pdv
+end
 
 
+function Qfunction(parameter, ehat, dhat)
+    if parameter[2] < 0
+        parameter[2] = 2
+    elseif parameter[4] < 0
+        parameter[4] = 2
+    end
+
+    entry_value = pdf.(Normal(parameter[1], parameter[2]), ehat)
+    exit_value = pdf.(Normal(parameter[3], parameter[4]), dhat)
+    state_list = [1,2,3]
+    fnum_list = [1,2,3,4,5]
+    Lambda = zeros(eltype(Float64), 5,3)
+    Lambda_e = zeros(eltype(Float64), 5,3)
+    for i in 1:size(fnum_list,1)
+        for j in 1:size(state_list,1)
+            temp = pdv_calc(10000, state_list[j], fnum_list[i], transition, entry_value, exit_value, param)
+            Lambda[i,j] = temp[2]
+            Lambda_e[i,j] = temp[1]
+        end
+    end
+    res = sum(( cdf(Normal(0,1), (Lambda .- parameter[1]) / parameter[2] )   - dhat).^2) + sum(( cdf(Normal(0,1), (Lambda_e .- parameter[3]) / parameter[4] )   - ehat).^2)
+    return res
+end
 
 
-
-
-
-
-
-
-
-
-
-
-def Q_n_first_method(theta_distribution, sim_num):
-    gamma_loc, gamma_scale, mu_loc, mu_scale = theta_distribution
-    entry_TH = norm.ppf(estimated_entry_prob_matrix, loc=gamma_loc, scale=gamma_scale)
-    exit_TH = norm.ppf(estimated_remain_prob_matrix, loc=mu_loc, scale=mu_scale)
-
-    # (1) generate incumbent lambda matrix
-    Lambda_matrix_incumbent = np.ones((5,3))
-    for N in [1,2,3,4,5]:
-        for x_idx in [0,1,2]:
-            simulation_list = [forward_simulate_incumbent.remote(beta, cournot_pi_matrix, entry_TH, exit_TH, theta_distribution, s, N, x_idx) for s in range(sim_num)]
-            simulation_array = np.array(ray.get(simulation_list))
-            Lambda_matrix_incumbent[N-1][x_idx] = simulation_array.mean()
-
-    # (2) generate entrant lambda matrix
-    Lambda_matrix_entrant = np.ones((5,3))
-    for N in [0,1,2,3,4]:
-        for x_idx in [0,1,2]:
-            simulation_list = [forward_simulate_entrant.remote(beta, cournot_pi_matrix, entry_TH, exit_TH, theta_distribution, s, N, x_idx) for s in range(sim_num)]
-            simulation_array = np.array(ray.get(simulation_list))
-            Lambda_matrix_entrant[N][x_idx] = simulation_array.mean()
-
-    incumbent_term = ((norm.cdf((Lambda_matrix_incumbent - mu_loc)/mu_scale) - estimated_remain_prob_matrix)**2).sum()
-    entrant_term = ((norm.cdf((Lambda_matrix_entrant - gamma_loc)/gamma_scale) - estimated_entry_prob_matrix)**2).sum()
-
-    return incumbent_term + entrant_term
-
-
-
-
+opt = Optim.optimize(vars -> Qfunction(vars, ehat, dhat), ones(4), Optim.Options(show_trace = true, f_tol = 1e-4, g_tol = 1e-4))
+estimates_identity = opt.minimizer
 
 
 
